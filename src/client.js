@@ -1,9 +1,6 @@
 import { Game } from './game.js';
 import { showModeScreen, hideModeScreen, showHUD, showWaiting, hideWaiting } from './ui.js';
 
-// Auto-start on load
-new CyberpunkRaceClient();
-
 class CyberpunkRaceClient {
   constructor() {
     this.game = null;
@@ -137,4 +134,7 @@ class CyberpunkRaceClient {
     showHUD();
   }
 }
+
+// Auto-start on load — placed AFTER class definition to avoid TDZ ReferenceError
+new CyberpunkRaceClient();
 
