@@ -1,0 +1,7 @@
+application:
+  name: hermes-cyberpunk-race
+  uuid: y139a666ke4t0xp5ba8jtysg
+  build:
+    dockerfile: Dockerfile
+    port: 3000
+  static: false
