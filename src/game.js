@@ -124,7 +124,6 @@ export class Game {
 
     const pos = this.aiCar.mesh.position;
     let nearestDist = Infinity;
-    let targetWaypoint = WAYPOINTS[0];
 
     for (let i = 0; i < WAYPOINTS.length; i++) {
       const wp = WAYPOINTS[i];
