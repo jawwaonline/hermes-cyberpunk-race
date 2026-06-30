@@ -128,7 +128,7 @@ class CyberpunkRaceClient {
   async startAIMode() {
     this.mode = 'ai';
     try {
-      await this.connect(`ws://${window.location.host}`);
+      await this.connect(`wss://${window.location.host}`);
       this.ws.send(JSON.stringify({ type: 'start-ai' }));
     } catch (err) {
       showConnectionError('Human vs AI');
@@ -139,7 +139,7 @@ class CyberpunkRaceClient {
     this.mode = 'hvh';
     showWaiting();
     try {
-      await this.connect(`ws://${window.location.host}`);
+      await this.connect(`wss://${window.location.host}`);
       this.ws.send(JSON.stringify({ type: 'join' }));
     } catch (err) {
       hideWaiting();
@@ -174,7 +174,7 @@ class CyberpunkRaceClient {
     // Reconnect WebSocket if disconnected
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       try {
-        await this.connect(`ws://${window.location.host}`);
+        await this.connect(`wss://${window.location.host}`);
         if (this.mode === 'ai') {
           this.ws.send(JSON.stringify({ type: 'start-ai' }));
         } else {
