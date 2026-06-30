@@ -12,10 +12,13 @@ const PORT = process.env.PORT || 3000;
 const server = http.createServer((req, res) => {
   let filePath = req.url === '/' ? 'index.html' : req.url.replace(/^\//, '');
 
-  // Route /src/* to src/ and /lib/* to lib/
+  // Route by prefix: /src/* → repo/src/, /lib/* → repo/lib/, everything else → repo/public/
+  // __dirname = /app/src (server.js is at src/server.js in repo)
   if (filePath.startsWith('src/')) {
-    filePath = path.join(__dirname, filePath);
+    // /src/game.js → strip 'src/' prefix → /app/src/game.js
+    filePath = path.join(__dirname, filePath.slice(4));
   } else if (filePath.startsWith('lib/')) {
+    // /lib/three.module.js → /app/lib/three.module.js
     filePath = path.join(__dirname, '..', filePath);
   } else {
     filePath = path.join(__dirname, '..', 'public', filePath);
