@@ -11,7 +11,15 @@ const PORT = process.env.PORT || 3000;
 
 const server = http.createServer((req, res) => {
   let filePath = req.url === '/' ? 'index.html' : req.url.replace(/^\//, '');
-  filePath = path.join(__dirname, '..', 'public', filePath);
+
+  // Route /src/* to src/ and /lib/* to lib/
+  if (filePath.startsWith('src/')) {
+    filePath = path.join(__dirname, filePath);
+  } else if (filePath.startsWith('lib/')) {
+    filePath = path.join(__dirname, '..', filePath);
+  } else {
+    filePath = path.join(__dirname, '..', 'public', filePath);
+  }
 
   const ext = path.extname(filePath);
   const contentTypes = {
