@@ -92,9 +92,7 @@ export class Game {
 
     requestAnimationFrame(() => this.animate());
 
-    const now = performance.now();
-    const dt = (now - this.lastTime) / 16.67;
-    this.lastTime = now;
+    this.lastTime = performance.now();
 
     const input = this.controls.getInput();
     this.playerCar.update(input);
@@ -133,7 +131,6 @@ export class Game {
       const dist = Math.hypot(pos.x - wp.x, pos.z - wp.z);
       if (dist < nearestDist) {
         nearestDist = dist;
-        targetWaypoint = wp;
         this.aiCar.aiWaypointIndex = i;
       }
     }

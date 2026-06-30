@@ -1,5 +1,8 @@
 import { Game } from './game.js';
-import { showModeScreen, hideModeScreen, showHUD, showWaiting, hideWaiting, showEndScreen, hideEndScreen } from './ui.js';
+import { showModeScreen, hideModeScreen, showHUD, showWaiting, hideWaiting, showEndScreen } from './ui.js';
+
+// Auto-start on load
+new CyberpunkRaceClient();
 
 class CyberpunkRaceClient {
   constructor() {
