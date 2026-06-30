@@ -79,6 +79,7 @@ class CyberpunkRaceClient {
         break;
 
       case 'go':
+        this.playerIndex = msg.playerIndex;
         this.isRaceStarted = true;
         this.stopWaitingTimer();
         hideWaiting();
