@@ -1,0 +1,19 @@
+{
+  "name": "hermes-cyberpunk-race",
+  "version": "1.0.0",
+  "description": "3D Cyberpunk Browser Racing Game — Human vs Human via WebSocket + Human vs AI",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "lint": "eslint src/ public/",
+    "test": "node --test tests/unit/"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0"
+  }
+}

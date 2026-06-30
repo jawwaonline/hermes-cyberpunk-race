@@ -1,0 +1,7 @@
+node_modules/
+.env
+*.log
+*.pid
+data.json
+debug-*.js
+test-*.js
