@@ -26,16 +26,13 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Whitelist: only serve from /public/ or /src/ under project root
   let urlPath = req.url.split('?')[0];
   let filePath;
   if (urlPath.startsWith('/src/')) {
-    // /src/file.js → /app/src/file.js (must be under SRC_DIR)
-    const relative = urlPath.slice(5); // strip '/src/'
+    const relative = urlPath.slice(5);
     filePath = path.join(SRC_DIR, relative);
     if (!filePath.startsWith(SRC_DIR)) { res.writeHead(403); res.end('Forbidden'); return; }
   } else {
-    // Everything else from /public/
     const relative = urlPath.replace(/^\//, '');
     filePath = path.join(PUBLIC_DIR, relative);
     if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end('Forbidden'); return; }
@@ -66,44 +63,57 @@ let aiState = null;
 let aiLap = 1;
 let aiFinished = false;
 let aiRotation = 0;
+let aiPrevZ = -200; // Start at bottom of oval
 
-// AI state
+// AI state for oval track
 function resetAIState() {
   aiLap = 1;
   aiFinished = false;
   aiRotation = 0;
-  aiState = { x: 5, y: 0, z: -140, waypointIndex: 0 };
+  aiPrevZ = -200;
+  
+  // Start position: bottom of oval, right side (x=8, z=-200)
+  aiState = { x: 8, y: 0, z: -200, waypointIndex: 0 };
 }
 
 function updateAIState() {
   if (aiState === null) resetAIState();
 
   const pos = aiState;
-  const target = WAYPOINTS[pos.waypointIndex];
-  const dx = target.x - pos.x;
-  const dz = target.z - pos.z;
+  
+  // Navigate using oval waypoints
+  const targetWaypoint = WAYPOINTS[pos.waypointIndex];
+  const dx = targetWaypoint.x - pos.x;
+  const dz = targetWaypoint.z - pos.z;
   const distToWaypoint = Math.hypot(dx, dz);
 
-  if (distToWaypoint < 5) {
+  // Advance to next waypoint when close enough
+  if (distToWaypoint < 20) {
     pos.waypointIndex = (pos.waypointIndex + 1) % WAYPOINTS.length;
   }
 
+  // Calculate target angle for steering
   const targetAngle = Math.atan2(dx, dz);
   let angleDiff = targetAngle - aiRotation;
   while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
   while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
+  // Smooth steering
   aiRotation += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), 0.045);
+  
+  // Slightly slower on curves
   const velocity = 0.8;
 
+  // Move AI car
   aiState.x += Math.sin(aiRotation) * velocity;
   aiState.z += Math.cos(aiRotation) * velocity;
 
-  if (aiState.z >= 0 && aiState.prevZ < 0) {
+  // Lap detection: crossing from positive z to negative z at bottom
+  if (aiPrevZ > -200 && aiState.z <= -200) {
     aiLap++;
     if (aiLap > 3) aiFinished = true;
   }
-  aiState.prevZ = aiState.z;
+  aiPrevZ = aiState.z;
 }
 
 function broadcastToRoom(roomId, message, excludeWs = null) {
@@ -140,16 +150,15 @@ function stopAIBroadcast() {
 }
 
 // --- Input validation helpers ---
-const VALID_POSITION = /^-?\d+(\.\d+)?$/;
 function validateNumber(val, min, max) {
   const n = Number(val);
   return isNaN(n) || !isFinite(n) || n < min || n > max ? null : n;
 }
 
-// Rate limiting: track last message time per ws
-const msgRateLimit = new WeakMap(); // ws → { count, resetAt }
+// Rate limiting
+const msgRateLimit = new WeakMap();
 const RATE_WINDOW_MS = 1000;
-const RATE_MAX = 30; // max 30 messages per second per client
+const RATE_MAX = 30;
 
 wss.on('connection', (ws) => {
   ws.isAlive = true;
@@ -160,7 +169,6 @@ wss.on('connection', (ws) => {
   ws.on('pong', () => { ws.isAlive = true; });
 
   ws.on('message', (data) => {
-    // Rate limiting
     const rl = msgRateLimit.get(ws);
     const now = Date.now();
     if (now > rl.resetAt) { rl.count = 0; rl.resetAt = now + RATE_WINDOW_MS; }
@@ -175,7 +183,7 @@ wss.on('connection', (ws) => {
     try {
       msg = JSON.parse(data.toString());
     } catch {
-      return; // Silently ignore malformed JSON
+      return;
     }
 
     if (msg.type === 'start-ai') {
@@ -207,7 +215,6 @@ wss.on('connection', (ws) => {
     }
 
     if (msg.type === 'position') {
-      // Validate ALL fields — reject anything out of range
       const x = validateNumber(msg.x, -500, 500);
       const y = validateNumber(msg.y, -10, 50);
       const z = validateNumber(msg.z, -500, 500);
@@ -219,7 +226,6 @@ wss.on('connection', (ws) => {
         return;
       }
 
-      // finished is server-authoritative — ignore client value
       const safeMsg = { type: 'opponent', x, y, z, rotation, lap, finished: false };
 
       if (ws.roomId === 'ai') {

@@ -95,16 +95,16 @@ export class Game {
 
     const input = this.controls.getInput();
     this.playerCar.update(input, dt);
-    this.playerCar.checkLap(TRACK_LENGTH);
+    this.playerCar.checkLap();
 
     this.updateCamera();
 
     if (this.aiCar) {
       this.updateAI(dt);
-      this.aiCar.checkLap(TRACK_LENGTH);
+      this.aiCar.checkLap();
 
-      this.playerProgress = this.playerCar.getProgress(TRACK_LENGTH);
-      this.aiProgress = this.aiCar.getProgress(TRACK_LENGTH);
+      this.playerProgress = this.playerCar.getProgress();
+      this.aiProgress = this.aiCar.getProgress();
     }
 
     this.renderer.render(this.scene, this.camera);
