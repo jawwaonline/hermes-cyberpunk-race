@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT || 3000;
 
 const server = http.createServer((req, res) => {
-  let filePath = req.url === '/' ? '/index.html' : req.url;
+  let filePath = req.url === '/' ? 'index.html' : req.url.replace(/^\//, '');
   filePath = path.join(__dirname, '..', 'public', filePath);
 
   const ext = path.extname(filePath);
