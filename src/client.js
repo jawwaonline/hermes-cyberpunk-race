@@ -1,5 +1,5 @@
 import { Game } from './game.js';
-import { showModeScreen, hideModeScreen, showHUD, hideHUD, showWaiting, hideWaiting, showEndScreen, hideEndScreen } from './ui.js';
+import { showModeScreen, hideModeScreen, showHUD, showWaiting, hideWaiting, showEndScreen, hideEndScreen } from './ui.js';
 
 class CyberpunkRaceClient {
   constructor() {
@@ -135,4 +135,3 @@ class CyberpunkRaceClient {
   }
 }
 
-const client = new CyberpunkRaceClient();
