@@ -46,6 +46,7 @@
     #hud .lap { font-size: 1.4rem; margin-bottom: 0.5rem; }
     #hud .pos { font-size: 1.2rem; color: #f0f; margin-bottom: 0.5rem; }
     #hud .speed { font-size: 1rem; color: #ff0; }
+    #hud .controls-hint { font-size: 0.75rem; color: #666; margin-top: 0.5rem; }
 
     #end-screen {
       display: none;
@@ -91,11 +92,15 @@
     <div class="lap">Lap <span id="lap-current">1</span>/3</div>
     <div class="pos">Position: <span id="pos-display">1st</span></div>
     <div class="speed"><span id="speed-display">0</span> km/h</div>
+    <div class="controls-hint">WASD / ←↑↓→ to steer</div>
   </div>
 
   <div id="end-screen">
     <h2 id="end-title">WINNER</h2>
-    <button class="mode-btn" id="btn-restart">Race Again</button>
+    <div style="display:flex;gap:1rem">
+      <button class="mode-btn" id="btn-restart">Race Again</button>
+      <button class="mode-btn" id="btn-back-menu">Back to Menu</button>
+    </div>
   </div>
 
   <div id="scanlines"></div>

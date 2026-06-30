@@ -68,12 +68,8 @@ export class Game {
     this.mode = mode;
     this.isRunning = true;
 
-    if (this.playerCar) {
-      this.scene.remove(this.playerCar.mesh);
-    }
-    if (this.aiCar) {
-      this.scene.remove(this.aiCar.mesh);
-    }
+    if (this.playerCar) this.scene.remove(this.playerCar.mesh);
+    if (this.aiCar) this.scene.remove(this.aiCar.mesh);
 
     this.playerCar = new Car(this.scene, true, 0x00ffff);
     this.playerCar.totalLaps = 3;
@@ -81,6 +77,7 @@ export class Game {
     if (mode === 'ai') {
       this.aiCar = new Car(this.scene, false, 0xff00ff);
       this.aiCar.totalLaps = 3;
+      this.aiCar.aiWaypointIndex = 0;
     }
 
     this.lastTime = performance.now();
@@ -92,16 +89,18 @@ export class Game {
 
     requestAnimationFrame(() => this.animate());
 
-    this.lastTime = performance.now();
+    const now = performance.now();
+    const dt = Math.min((now - this.lastTime) / 1000, 0.1); // cap at 100ms to avoid spiral of death
+    this.lastTime = now;
 
     const input = this.controls.getInput();
-    this.playerCar.update(input);
+    this.playerCar.update(input, dt);
     this.playerCar.checkLap(TRACK_LENGTH);
 
     this.updateCamera();
 
     if (this.aiCar) {
-      this.updateAI();
+      this.updateAI(dt);
       this.aiCar.checkLap(TRACK_LENGTH);
 
       this.playerProgress = this.playerCar.getProgress(TRACK_LENGTH);
@@ -119,20 +118,27 @@ export class Game {
     }
   }
 
-  updateAI() {
+  updateAI(dt) {
     if (!this.aiCar || this.aiCar.finished) return;
+
+    // Ensure aiWaypointIndex exists on car
+    if (this.aiCar.aiWaypointIndex === undefined) {
+      this.aiCar.aiWaypointIndex = 0;
+    }
 
     const pos = this.aiCar.mesh.position;
     let nearestDist = Infinity;
+    let nearestIdx = this.aiCar.aiWaypointIndex;
 
     for (let i = 0; i < WAYPOINTS.length; i++) {
       const wp = WAYPOINTS[i];
       const dist = Math.hypot(pos.x - wp.x, pos.z - wp.z);
       if (dist < nearestDist) {
         nearestDist = dist;
-        this.aiCar.aiWaypointIndex = i;
+        nearestIdx = i;
       }
     }
+    this.aiCar.aiWaypointIndex = nearestIdx;
 
     const nextIndex = (this.aiCar.aiWaypointIndex + 1) % WAYPOINTS.length;
     const nextWaypoint = WAYPOINTS[nextIndex];
@@ -145,11 +151,12 @@ export class Game {
     while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
     while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
-    this.aiCar.rotation += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), 0.05);
+    const s = dt * 60; // scale to 60fps baseline
+    this.aiCar.rotation += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), 0.05 * s);
     this.aiCar.velocity = 0.8;
 
-    this.aiCar.mesh.position.x += Math.sin(this.aiCar.rotation) * this.aiCar.velocity;
-    this.aiCar.mesh.position.z += Math.cos(this.aiCar.rotation) * this.aiCar.velocity;
+    this.aiCar.mesh.position.x += Math.sin(this.aiCar.rotation) * this.aiCar.velocity * s;
+    this.aiCar.mesh.position.z += Math.cos(this.aiCar.rotation) * this.aiCar.velocity * s;
     this.aiCar.mesh.rotation.y = this.aiCar.rotation;
   }
 
@@ -223,6 +230,7 @@ export class Game {
     if (!this.aiCar) {
       this.aiCar = new Car(this.scene, false, 0xff00ff);
       this.aiCar.totalLaps = 3;
+      this.aiCar.aiWaypointIndex = 0;
     }
     this.aiCar.setPosition(x, y, z, rotation);
   }
@@ -230,7 +238,9 @@ export class Game {
   updateHUD() {
     if (!this.playerCar) return;
 
-    document.getElementById('lap-current').textContent = Math.min(this.playerCar.lap, 3);
+    const lap = this.playerCar.lap;
+    document.getElementById('lap-current').textContent =
+      lap > this.playerCar.totalLaps ? 'FINISH!' : `${lap}/${this.playerCar.totalLaps}`;
     document.getElementById('speed-display').textContent = Math.round(this.playerCar.getSpeed());
 
     if (this.aiCar) {
@@ -242,9 +252,12 @@ export class Game {
 
   restart() {
     if (this.playerCar) this.playerCar.reset();
-    if (this.aiCar) this.aiCar.reset();
-    this.isRunning = true;
+    if (this.aiCar) {
+      this.aiCar.reset();
+      this.aiCar.aiWaypointIndex = 0;
+    }
     this.lastTime = performance.now();
+    this.isRunning = true;
     this.animate();
   }
 

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import { TRACK_WIDTH, TRACK_LENGTH, WAYPOINTS } from './shared-track.js';
 
-export const TRACK_WIDTH = 20;
-export const TRACK_LENGTH = 300;
+export { TRACK_WIDTH, TRACK_LENGTH, WAYPOINTS };
+
 export const BARRIER_HEIGHT = 2;
 
 const CYAN = 0x00ffff;
@@ -174,29 +175,3 @@ export function createFinishLine(scene) {
 
   return gateGroup;
 }
-
-export const WAYPOINTS = [];
-for (let i = 0; i < TRACK_LENGTH; i += 25) {
-  WAYPOINTS.push({ x: 0, z: i - TRACK_LENGTH / 2 });
-}
-WAYPOINTS.push({ x: TRACK_WIDTH / 2, z: TRACK_LENGTH / 2 });
-for (let i = 0; i <= 20; i++) {
-  const angle = (Math.PI * i) / 20;
-  WAYPOINTS.push({
-    x: Math.cos(angle) * (TRACK_WIDTH / 2 + 2),
-    z: TRACK_LENGTH / 2 + Math.sin(angle) * (TRACK_WIDTH / 2 + 2)
-  });
-}
-WAYPOINTS.push({ x: 0, z: TRACK_LENGTH / 2 });
-for (let i = 0; i < TRACK_LENGTH; i += 25) {
-  WAYPOINTS.push({ x: 0, z: TRACK_LENGTH / 2 - i });
-}
-WAYPOINTS.push({ x: -TRACK_WIDTH / 2, z: -TRACK_LENGTH / 2 });
-for (let i = 0; i <= 20; i++) {
-  const angle = (Math.PI * i) / 20;
-  WAYPOINTS.push({
-    x: Math.cos(angle + Math.PI) * (TRACK_WIDTH / 2 + 2),
-    z: -TRACK_LENGTH / 2 + Math.sin(angle + Math.PI) * (TRACK_WIDTH / 2 + 2)
-  });
-}
-WAYPOINTS.push({ x: 0, z: -TRACK_LENGTH / 2 });

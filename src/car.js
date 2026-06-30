@@ -72,30 +72,36 @@ export class Car {
     scene.add(this.mesh);
   }
 
-  update(input) {
+  update(input, dt = 1 / 60) {
+    // dt: time delta in seconds (1/60 = 60fps baseline)
+    // Scale factor so original tuned values work at 60fps baseline
+    const s = dt * 60;
+
     if (this.finished) return;
 
     if (input.forward) {
-      this.velocity += this.acceleration;
+      this.velocity += this.acceleration * s;
     }
     if (input.backward) {
-      this.velocity -= this.acceleration * 0.5;
+      this.velocity -= this.acceleration * 0.5 * s;
     }
 
-    this.velocity *= this.friction;
+    // Friction applied per-physics-step (scaled)
+    const frictionSteps = Math.round(s);
+    for (let i = 0; i < frictionSteps; i++) {
+      this.velocity *= this.friction;
+    }
+
     this.velocity = Math.max(-this.maxSpeed * 0.3, Math.min(this.maxSpeed, this.velocity));
 
     if (Math.abs(this.velocity) > 0.01) {
-      if (input.left) {
-        this.rotation += this.turnSpeed * (this.velocity > 0 ? 1 : -1);
-      }
-      if (input.right) {
-        this.rotation -= this.turnSpeed * (this.velocity > 0 ? 1 : -1);
-      }
+      const dir = this.velocity > 0 ? 1 : -1;
+      if (input.left) this.rotation += this.turnSpeed * s * dir;
+      if (input.right) this.rotation -= this.turnSpeed * s * dir;
     }
 
-    this.mesh.position.x += Math.sin(this.rotation) * this.velocity;
-    this.mesh.position.z += Math.cos(this.rotation) * this.velocity;
+    this.mesh.position.x += Math.sin(this.rotation) * this.velocity * s;
+    this.mesh.position.z += Math.cos(this.rotation) * this.velocity * s;
     this.mesh.rotation.y = this.rotation;
   }
 

@@ -1,5 +1,8 @@
 import { Game } from './game.js';
-import { showModeScreen, hideModeScreen, showHUD, showWaiting, hideWaiting } from './ui.js';
+import {
+  showModeScreen, hideModeScreen, showHUD, showWaiting, hideWaiting,
+  showConnectionError, showWaitingTimer, updateWaitingTimer, hideWaitingTimer
+} from './ui.js';
 
 class CyberpunkRaceClient {
   constructor() {
@@ -9,6 +12,8 @@ class CyberpunkRaceClient {
     this.playerIndex = null;
     this.isRaceStarted = false;
     this.positionInterval = null;
+    this.waitingTimer = null;
+    this.waitingStartTime = null;
 
     this.initUI();
   }
@@ -29,19 +34,27 @@ class CyberpunkRaceClient {
       this.restart();
     });
 
+    document.getElementById('btn-back-menu').addEventListener('click', () => {
+      this.backToMenu();
+    });
+
     showModeScreen();
   }
 
   connect(url) {
     return new Promise((resolve, reject) => {
+      if (this.ws) {
+        this.ws.close();
+        this.ws = null;
+      }
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
         resolve();
       };
 
-      this.ws.onerror = (err) => {
-        reject(err);
+      this.ws.onerror = () => {
+        reject(new Error('WebSocket connection failed'));
       };
 
       this.ws.onmessage = (event) => {
@@ -51,6 +64,7 @@ class CyberpunkRaceClient {
       this.ws.onclose = () => {
         if (this.positionInterval) {
           clearInterval(this.positionInterval);
+          this.positionInterval = null;
         }
       };
     });
@@ -61,11 +75,12 @@ class CyberpunkRaceClient {
       case 'waiting':
         this.isRaceStarted = false;
         showWaiting();
+        this.startWaitingTimer();
         break;
 
       case 'go':
-        this.playerIndex = msg.playerIndex;
         this.isRaceStarted = true;
+        this.stopWaitingTimer();
         hideWaiting();
         hideModeScreen();
         showHUD();
@@ -83,7 +98,30 @@ class CyberpunkRaceClient {
 
       case 'opponent_left':
         break;
+
+      case 'error':
+        console.warn('Server error:', msg.msg);
+        break;
     }
+  }
+
+  startWaitingTimer() {
+    this.waitingStartTime = Date.now();
+    showWaitingTimer();
+    this.waitingTimer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - this.waitingStartTime) / 1000);
+      const mins = Math.floor(elapsed / 60);
+      const secs = elapsed % 60;
+      updateWaitingTimer(mins, secs);
+    }, 1000);
+  }
+
+  stopWaitingTimer() {
+    if (this.waitingTimer) {
+      clearInterval(this.waitingTimer);
+      this.waitingTimer = null;
+    }
+    hideWaitingTimer();
   }
 
   async startAIMode() {
@@ -92,7 +130,7 @@ class CyberpunkRaceClient {
       await this.connect(`ws://${window.location.host}`);
       this.ws.send(JSON.stringify({ type: 'start-ai' }));
     } catch (err) {
-      console.error('Failed to connect:', err);
+      showConnectionError('Human vs AI');
     }
   }
 
@@ -103,7 +141,8 @@ class CyberpunkRaceClient {
       await this.connect(`ws://${window.location.host}`);
       this.ws.send(JSON.stringify({ type: 'join' }));
     } catch (err) {
-      console.error('Failed to connect:', err);
+      hideWaiting();
+      showConnectionError('Human vs Human');
     }
   }
 
@@ -127,14 +166,46 @@ class CyberpunkRaceClient {
     }, 50);
   }
 
-  restart() {
+  async restart() {
     hideEndScreen();
     this.game.restart();
+
+    // Reconnect WebSocket if disconnected
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      try {
+        await this.connect(`ws://${window.location.host}`);
+        if (this.mode === 'ai') {
+          this.ws.send(JSON.stringify({ type: 'start-ai' }));
+        } else {
+          this.ws.send(JSON.stringify({ type: 'join' }));
+        }
+      } catch {
+        showConnectionError(this.mode === 'ai' ? 'Human vs AI' : 'Human vs Human');
+        return;
+      }
+    }
+
     this.isRaceStarted = true;
     showHUD();
   }
+
+  backToMenu() {
+    this.stopWaitingTimer();
+    if (this.positionInterval) {
+      clearInterval(this.positionInterval);
+      this.positionInterval = null;
+    }
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    this.isRaceStarted = false;
+    this.mode = null;
+    this.game.destroy();
+    const container = document.getElementById('game-container');
+    this.game = new Game(container);
+    showModeScreen();
+  }
 }
 
-// Auto-start on load — placed AFTER class definition to avoid TDZ ReferenceError
 new CyberpunkRaceClient();
-
