@@ -1,7 +1,8 @@
 import { Game } from './game.js';
 import {
   showModeScreen, hideModeScreen, showHUD, showWaiting, hideWaiting,
-  showConnectionError, showWaitingTimer, updateWaitingTimer, hideWaitingTimer
+  showConnectionError, showWaitingTimer, updateWaitingTimer, hideWaitingTimer,
+  hideEndScreen
 } from './ui.js';
 
 class CyberpunkRaceClient {
@@ -94,7 +95,7 @@ class CyberpunkRaceClient {
         break;
 
       case 'ai_position':
-        this.game.setOpponentPosition(msg.x, msg.y, msg.z, msg.rotation);
+        this.game.setOpponentPosition(msg.x, msg.y, msg.z, msg.rotation, msg.waypointIndex);
         break;
 
       case 'opponent_left':

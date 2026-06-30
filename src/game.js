@@ -119,7 +119,7 @@ export class Game {
   }
 
   updateAI(dt) {
-    if (!this.aiCar || this.aiCar.finished) return;
+    if (!this.aiCar || this.aiCar.finished || this.aiCar.playerIsAI) return;
 
     // Ensure aiWaypointIndex exists on car
     if (this.aiCar.aiWaypointIndex === undefined) {
@@ -226,13 +226,17 @@ export class Game {
     };
   }
 
-  setOpponentPosition(x, y, z, rotation) {
+  setOpponentPosition(x, y, z, rotation, waypointIndex) {
     if (!this.aiCar) {
       this.aiCar = new Car(this.scene, false, 0xff00ff);
       this.aiCar.totalLaps = 3;
       this.aiCar.aiWaypointIndex = 0;
     }
     this.aiCar.setPosition(x, y, z, rotation);
+    this.aiCar.playerIsAI = true;
+    if (waypointIndex !== undefined) {
+      this.aiCar.aiWaypointIndex = waypointIndex;
+    }
   }
 
   updateHUD() {

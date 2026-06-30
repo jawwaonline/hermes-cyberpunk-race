@@ -130,7 +130,8 @@ function broadcastAIPositions() {
   const aiMessage = {
     type: 'ai_position',
     x: aiState.x, y: aiState.y, z: aiState.z,
-    rotation: aiRotation, lap: aiLap, finished: aiFinished
+    rotation: aiRotation, waypointIndex: aiState.waypointIndex,
+    lap: aiLap, finished: aiFinished
   };
   aiModeClients.forEach(ws => {
     if (ws.readyState === 1) ws.send(JSON.stringify(aiMessage));
@@ -187,7 +188,7 @@ wss.on('connection', (ws) => {
     }
 
     if (msg.type === 'start-ai') {
-      ws.roomId = 'ai';
+      ws.isAIMode = true;
       aiModeClients.add(ws);
       ws.send(JSON.stringify({ type: 'go', playerIndex: 0 }));
       startAIBroadcast();
@@ -196,18 +197,20 @@ wss.on('connection', (ws) => {
 
     if (msg.type === 'join') {
       for (const [roomId, room] of rooms.entries()) {
-        if (room.players.length === 1 && !room.started) {
+        if (room.players.length === 1 && !room.started && !room.locked) {
+          room.locked = true;
           room.players.push(ws);
           ws.roomId = roomId;
           ws.playerIndex = 1;
           room.started = true;
           room.players[0].send(JSON.stringify({ type: 'go', playerIndex: 0 }));
           ws.send(JSON.stringify({ type: 'go', playerIndex: 1 }));
+          room.locked = false;
           return;
         }
       }
       const newRoomId = `room_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      rooms.set(newRoomId, { players: [ws], started: false });
+      rooms.set(newRoomId, { players: [ws], started: false, locked: false, finishedCount: 0 });
       ws.roomId = newRoomId;
       ws.playerIndex = 0;
       ws.send(JSON.stringify({ type: 'waiting' }));
@@ -226,14 +229,24 @@ wss.on('connection', (ws) => {
         return;
       }
 
-      const safeMsg = { type: 'opponent', x, y, z, rotation, lap, finished: false };
+      const safeMsg = { type: 'opponent', x, y, z, rotation, lap, finished: msg.finished };
 
-      if (ws.roomId === 'ai') {
+      if (ws.isAIMode) {
         aiModeClients.forEach(client => {
           if (client !== ws && client.readyState === 1) client.send(JSON.stringify(safeMsg));
         });
       } else if (ws.roomId) {
         broadcastToRoom(ws.roomId, safeMsg, ws);
+
+        if (msg.finished) {
+          const room = rooms.get(ws.roomId);
+          if (room) {
+            room.finishedCount = (room.finishedCount || 0) + 1;
+            if (room.finishedCount >= 2) {
+              setTimeout(() => rooms.delete(ws.roomId), 5000);
+            }
+          }
+        }
       }
     }
   });
