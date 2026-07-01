@@ -9,6 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = process.env.PORT || 3000;
+const VERSION = process.env.npm_package_version || '0.0.0';
 
 // --- Static file server with path traversal protection ---
 const ALLOWED_EXTS = new Set(['.html', '.js', '.css', '.json', '.ico', '.png', '.svg', '.woff2']);
@@ -16,6 +17,11 @@ const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
 const SRC_DIR = path.resolve(__dirname);
 
 const server = http.createServer((req, res) => {
+  if (req.url === '/api/version') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ version: VERSION }));
+    return;
+  }
   if (req.url === '/' || req.url === '/index.html') {
     const filePath = path.join(PUBLIC_DIR, 'index.html');
     fs.readFile(filePath, (err, content) => {
@@ -297,5 +303,5 @@ wss.on('close', () => { clearInterval(heartbeatInterval); stopAIBroadcast(); });
 process.on('SIGTERM', () => { server.close(); process.exit(0); });
 
 server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`[${VERSION}] Server running on http://localhost:${PORT}`);
 });

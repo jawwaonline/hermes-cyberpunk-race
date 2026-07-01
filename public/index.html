@@ -47,6 +47,13 @@
     #hud .pos { font-size: 1.2rem; color: #f0f; margin-bottom: 0.5rem; }
     #hud .speed { font-size: 1rem; color: #ff0; }
     #hud .controls-hint { font-size: 0.75rem; color: #666; margin-top: 0.5rem; }
+    #hud .version { font-size: 0.65rem; color: #444; margin-top: 0.5rem; }
+
+    #version-badge {
+      position: fixed; bottom: 8px; right: 12px;
+      font-size: 0.65rem; color: #333;
+      z-index: 50; pointer-events: none;
+    }
 
     #end-screen {
       display: none;
@@ -104,6 +111,7 @@
   </div>
 
   <div id="scanlines"></div>
+  <div id="version-badge"></div>
 
   <script type="module" src="/src/client.js"></script>
 </body>
