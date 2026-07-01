@@ -77,6 +77,74 @@ function nearestValidSplinePoint(x, z) {
   return { x: cx + nx / nLen * halfW, y: 0, z: cz + nz / nLen * halfW };
 }
 
+function computeCarAABB(x, z, yaw) {
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
+  const halfWidth = 1.0;
+  const halfLength = 2.0;
+
+  const corners = [
+    { x: -halfWidth, z: -halfLength },
+    { x: halfWidth, z: -halfLength },
+    { x: halfWidth, z: halfLength },
+    { x: -halfWidth, z: halfLength }
+  ];
+
+  const rotated = corners.map(c => ({
+    x: x + c.x * cos - c.z * sin,
+    z: z + c.x * sin + c.z * cos
+  }));
+
+  let minX = rotated[0].x, maxX = rotated[0].x;
+  let minZ = rotated[0].z, maxZ = rotated[0].z;
+
+  for (const c of rotated) {
+    minX = Math.min(minX, c.x);
+    maxX = Math.max(maxX, c.x);
+    minZ = Math.min(minZ, c.z);
+    maxZ = Math.max(maxZ, c.z);
+  }
+
+  return { min: { x: minX, y: 0, z: minZ }, max: { x: maxX, y: 0.6, z: maxZ } };
+}
+
+function boxesOverlap(a, b) {
+  return (
+    a.min.x <= b.max.x && a.max.x >= b.min.x &&
+    a.min.y <= b.max.y && a.max.y >= b.min.y &&
+    a.min.z <= b.max.z && a.max.z >= b.min.z
+  );
+}
+
+function checkCarCollision(carA, carB) {
+  const aabbA = computeCarAABB(carA.mesh.position.x, carA.mesh.position.z, carA.rotation);
+  const aabbB = computeCarAABB(carB.mesh.position.x, carB.mesh.position.z, carB.rotation);
+  return boxesOverlap(aabbA, aabbB);
+}
+
+function applyCollisionResponse(carA, carB) {
+  const dx = carB.mesh.position.x - carA.mesh.position.x;
+  const dz = carB.mesh.position.z - carA.mesh.position.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+
+  if (dist === 0) {
+    carA.mesh.position.x -= 1;
+    carB.mesh.position.x += 1;
+    return;
+  }
+
+  const overlap = 4.0 - dist;
+  if (overlap > 0) {
+    const nx = dx / dist;
+    const nz = dz / dist;
+    const push = overlap / 2 + 0.01;
+    carA.mesh.position.x -= nx * push;
+    carA.mesh.position.z -= nz * push;
+    carB.mesh.position.x += nx * push;
+    carB.mesh.position.z += nz * push;
+  }
+}
+
 export class Car {
   constructor(scene, isPlayer = true, color = 0x00ffff) {
     this.scene = scene;
@@ -285,6 +353,14 @@ export class Car {
 
   checkLap() {
     this.updateCheckpointAndProgress();
+  }
+
+  checkCollision(otherCar) {
+    return checkCarCollision(this, otherCar);
+  }
+
+  applyCollisionResponse(otherCar) {
+    applyCollisionResponse(this, otherCar);
   }
 
   getProgress() {
