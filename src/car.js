@@ -381,13 +381,35 @@ export class Car {
     const dx = x - cp.x;
     const dz = z - cp.z;
     if (dx * dx + dz * dz < cp.r * cp.r) {
-      if (this.nextCheckpoint === 0 && !this.finished) {
-        this.lap++;
-        if (this.lap >= this.totalLaps) {
-          this.finished = true;
+      // Direction validation: only count as a real pass if the car is
+      // moving in the *correct* direction around the oval.
+      // The correct direction at any checkpoint is tangent to the
+      // ellipse in the +angle direction (counter-clockwise on the x-z
+      // plane when looking from +y). Compute the tangent vector at
+      // the car's current angle and check the dot product with the
+      // car's velocity. If < 0, the car is going the wrong way.
+      const carAngle = this.getTrackAngle();
+      const tangentX = -Math.sin(carAngle) * A;
+      const tangentZ =  Math.cos(carAngle) * B;
+      const tlen = Math.hypot(tangentX, tangentZ);
+      const tx = tangentX / tlen;
+      const tz = tangentZ / tlen;
+      const vx = Math.sin(this.rotation) * this.velocity;
+      const vz = Math.cos(this.rotation) * this.velocity;
+      const dot = vx * tx + vz * tz;
+      if (dot > 0) {  // moving in the correct direction (any non-zero positive component)
+        if (this.nextCheckpoint === 0 && !this.finished) {
+          this.lap++;
+          if (this.lap >= this.totalLaps) {
+            this.finished = true;
+          }
         }
+        this.nextCheckpoint = (this.nextCheckpoint + 1) % CHECKPOINTS.length;
       }
-      this.nextCheckpoint = (this.nextCheckpoint + 1) % CHECKPOINTS.length;
+      // If dot <= 0, the car is going backwards through the checkpoint;
+      // we ignore this and let it pass through visually but don't
+      // advance. After 60 frames of wrong-way the existing
+      // wrongWayStreak counter handles the HUD warning.
     }
 
     const u = projectOntoTrack(x, z);

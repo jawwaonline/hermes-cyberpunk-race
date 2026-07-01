@@ -99,14 +99,18 @@ describe('Fix A — integration: 2 cars same position are pushed apart', () => {
     const scene = new FakeScene();
     const playerCar = new Car(scene, true, 0x00ffff);
     playerCar.mesh.position.set(30, 0, 0); // On top of checkpoint 1
+    // Rotate the car so its forward direction aligns with the +angle
+    // tangent at this point on the oval. Checkpoint 1 sits at (30,0) on
+    // the +X end of the oval — the +angle tangent there points in +Z.
+    // car.js uses rotation=0 means "forward = +Z", so rotation 0 is correct.
     const before = playerCar.nextCheckpoint;
 
-    playerCar.update({}, 1 / 60);
+    playerCar.update({ forward: true }, 1 / 60);
 
     assert.strictEqual(
       playerCar.nextCheckpoint,
       (before + 1) % 4,
-      'crossing a checkpoint should advance nextCheckpoint'
+      'crossing a checkpoint while moving forward should advance nextCheckpoint'
     );
   });
 });

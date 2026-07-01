@@ -50,12 +50,14 @@ export class Game {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    // Reduced bloom: threshold 0.6 (only really bright pixels glow),
+    // strength 0.55, radius 0.6. Was 1.4/0.85/0.0 which was way too much.
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      1.4, 0.85, 0.0
+      0.55, 0.6, 0.6
     );
     this.composer.addPass(bloomPass);
-    this.composer.addPass(new FilmPass(0.25, false));
+    this.composer.addPass(new FilmPass(0.18, false)); // also dialed back
     this.composer.addPass(new OutputPass());
 
     const ambientLight = new THREE.AmbientLight(0x1a1a3e, 0.4);
