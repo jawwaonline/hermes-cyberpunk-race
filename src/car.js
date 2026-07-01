@@ -8,6 +8,9 @@ const CHECKPOINTS = [
   { id: 3, x: -30, z: 0, r: 15 }
 ];
 
+const A = 30;
+const B = 200;
+
 function wrapDelta(d) {
   if (d > 0.5) return d - 1;
   if (d < -0.5) return d + 1;
@@ -19,6 +22,59 @@ function projectOntoTrack(x, z) {
   let t = (angle + Math.PI / 2) / (Math.PI * 2);
   if (t < 0) t += 1;
   return t;
+}
+
+const trackPolygon = (function() {
+  const inner = [];
+  const outer = [];
+  const N = 64;
+  const halfW = TRACK_WIDTH / 2;
+
+  for (let i = 0; i < N; i++) {
+    const angle = (i / N) * Math.PI * 2 - Math.PI / 2;
+    const cx = A * Math.cos(angle);
+    const cz = B * Math.sin(angle);
+
+    const nx = cx / (A * A);
+    const nz = cz / (B * B);
+    const nLen = Math.sqrt(nx * nx + nz * nz);
+
+    inner.push({ x: cx - nx / nLen * halfW, z: cz - nz / nLen * halfW });
+    outer.push({ x: cx + nx / nLen * halfW, z: cz + nz / nLen * halfW });
+  }
+
+  return { inner, outer };
+})();
+
+function pointInPolygon(x, z, polygon) {
+  let inside = false;
+  const n = polygon.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = polygon[i].x, zi = polygon[i].z;
+    const xj = polygon[j].x, zj = polygon[j].z;
+    if (((zi > z) !== (zj > z)) && (x < (xj - xi) * (z - zi) / (zj - zi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function isOnTrack(x, z) {
+  const inOuter = pointInPolygon(x, z, trackPolygon.outer);
+  const inInner = pointInPolygon(x, z, trackPolygon.inner);
+  return inOuter && !inInner;
+}
+
+function nearestValidSplinePoint(x, z) {
+  const angle = Math.atan2(z, x);
+  const cx = A * Math.cos(angle);
+  const cz = B * Math.sin(angle);
+  const nx = cx / (A * A);
+  const nz = cz / (B * B);
+  const nLen = Math.sqrt(nx * nx + nz * nz);
+  const halfW = TRACK_WIDTH / 2 - 1;
+
+  return { x: cx + nx / nLen * halfW, y: 0, z: cz + nz / nLen * halfW };
 }
 
 export class Car {
@@ -111,11 +167,13 @@ export class Car {
 
     if (this.finished) return;
 
+    const speed = Math.abs(this.velocity) * 300;
+
     if (input.forward) {
-      this.velocity += this.acceleration * s;
+      this.velocity += this.acceleration * s * this.speedMultiplier;
     }
     if (input.backward) {
-      this.velocity -= this.acceleration * 0.5 * s;
+      this.velocity -= this.acceleration * 0.5 * s * this.speedMultiplier;
     }
 
     const frictionSteps = Math.round(s);
@@ -134,6 +192,32 @@ export class Car {
     this.mesh.position.x += Math.sin(this.rotation) * this.velocity * s;
     this.mesh.position.z += Math.cos(this.rotation) * this.velocity * s;
     this.mesh.rotation.y = this.rotation;
+
+    this.updateOffTrack();
+    this.updateCheckpointAndProgress();
+  }
+
+  updateOffTrack() {
+    const x = this.mesh.position.x;
+    const z = this.mesh.position.z;
+
+    this.offTrack = !isOnTrack(x, z);
+    if (this.offTrack) {
+      this.speedMultiplier = 0.25;
+      this.offTrackStreak++;
+      if (Math.abs(this.velocity) * 300 < 1 && this.offTrackStreak > 90) {
+        const safe = nearestValidSplinePoint(x, z);
+        this.mesh.position.x = safe.x;
+        this.mesh.position.z = safe.z;
+        this.offTrackStreak = 0;
+      }
+    } else {
+      this.speedMultiplier = 1.0;
+      if (this.offTrackStreak > 60) {
+        this.strikes++;
+      }
+      this.offTrackStreak = 0;
+    }
   }
 
   getPosition() {
