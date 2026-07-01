@@ -437,6 +437,26 @@ export class Game {
       document.getElementById('pos-display').textContent = pos.toString().padStart(2, '0');
     }
 
+    // === Sprint 6 UX: lap progress bar (Mario Kart 8 style) ===
+    // Map car.t (progress 0..1) + lap to a percentage 0..100% across
+    // the bar.  Each lap fills the bar once.
+    const totalLaps = this.playerCar.totalLaps || 3;
+    const pProg = (this.playerCar.lap - 1) + (this.playerCar.t || 0);
+    const aProg = this.aiCar ? (this.aiCar.lap - 1) + (this.aiCar.t || 0) : 0;
+    const total = Math.max(pProg, aProg, 1);
+    const pPct = Math.min(100, (pProg / totalLaps) * 100);
+    const aPct = Math.min(100, (aProg / totalLaps) * 100);
+    const fill = document.getElementById('progress-fill');
+    const pDot = document.getElementById('progress-player');
+    const aDot = document.getElementById('progress-ai');
+    if (fill) fill.style.width = Math.max(pPct, aPct) + '%';
+    if (pDot) pDot.style.left = pPct + '%';
+    if (aDot) aDot.style.left = aPct + '%';
+    // Highlight the current next-checkpoint marker in pink
+    const nextCp = (this.playerCar.nextCheckpoint || 0) + 1;
+    const nextLabel = document.getElementById('next-cp-label');
+    if (nextLabel) nextLabel.textContent = `Next: CP${nextCp}`;
+
     const wrongWayEl = document.getElementById('hud-wrongway');
     if (wrongWayEl) {
       wrongWayEl.classList.toggle('visible', this.playerCar.wrongWayStreak > 30);
