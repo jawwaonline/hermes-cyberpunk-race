@@ -166,7 +166,7 @@ wss.on('connection', (ws) => {
   ws.roomId = null;
   ws.playerIndex = null;
   ws.lap = 1;
-  ws.lastZ = -200; // Start at finish line — forward crossing from here starts lap 1
+  ws.lastZ = -201; // Start BEFORE finish line — first forward crossing (to -200) IS detected
   ws.finished = false;
   msgRateLimit.set(ws, { count: 0, resetAt: Date.now() + RATE_WINDOW_MS });
 
