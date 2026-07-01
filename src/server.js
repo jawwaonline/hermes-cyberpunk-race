@@ -185,21 +185,6 @@ function resolveServerCollision(carA, carB) {
   return true;
 }
 
-// Tracks the latest reported position+yaw for every live player in a room
-// so we can run a server-authoritative pairwise AABB collision sweep after
-// every input batch.  Stored on the room object.
-function snapshotRoom(room) {
-  const snap = [];
-  for (const ws of room.players) {
-    if (!ws || ws.readyState !== 1) continue;
-    snap.push({
-      x: ws.lastX, z: ws.lastZ, yaw: ws.lastYaw,
-      ref: ws
-    });
-  }
-  return snap;
-}
-
 function broadcastToRoom(roomId, message, excludeWs = null) {
   const room = rooms.get(roomId);
   if (!room) return;
@@ -366,20 +351,15 @@ wss.on('connection', (ws) => {
         const self = { x: ws.lastX, z: ws.lastZ, yaw: ws.lastYaw };
         for (const otherWs of players) {
           const other = { x: otherWs.lastX, z: otherWs.lastZ, yaw: otherWs.lastYaw };
-          const beforeSelfX = self.x, beforeSelfZ = self.z;
-          const beforeOtherX = other.x, beforeOtherZ = other.z;
           if (resolveServerCollision(self, other)) {
-            // Push resolved positions back into the other player's tracked state
-            // so subsequent checks stay consistent.  The self side goes back
-            // onto the websocket at the end of this handler.
+            // Push resolved positions back into the other player's tracked
+            // state so subsequent checks stay consistent.  The self side
+            // is written back to ws below.
             otherWs.lastX = other.x;
             otherWs.lastZ = other.z;
             ws.lastX = self.x;
             ws.lastZ = self.z;
           }
-          // Avoid 'never read' lint for beforeX/beforeOtherX — they document
-          // the snapshot boundary.
-          void beforeSelfX; void beforeSelfZ; void beforeOtherX; void beforeOtherZ;
         }
       }
 

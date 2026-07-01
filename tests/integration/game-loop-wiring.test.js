@@ -77,19 +77,24 @@ describe('Fix A — integration: src/game.js:animate() wires up the new Car pipe
 
   it('runCollisionTick (or equivalent) calls checkCollision + applyCollisionResponse', () => {
     // Pull the runCollisionTick helper body out of game.js and assert it
-    // wires up the full Car pipeline.  Either the inline body in animate()
-    // OR a dedicated method is fine.
-    const tickIdx = source.indexOf('runCollisionTick');
-    assert.notStrictEqual(tickIdx, -1, 'src/game.js must define runCollisionTick');
-    const tickBody = extractBody(source, source.indexOf('{', tickIdx));
+    // wires up the full Car pipeline.  Skip comments by searching for the
+    // method definition rather than the first textual occurrence.
+    const defRe = /runCollisionTick\s*\(\s*\)\s*\{/g;
+    const m = defRe.exec(source);
+    assert.ok(m, 'src/game.js must define runCollisionTick');
+    const openIdx = m.index + m[0].length - 1;
+    const tickBody = extractBody(source, openIdx);
     assert.ok(tickBody, 'runCollisionTick body must parse');
     assert.match(tickBody, /\.checkCollision\s*\(/, 'runCollisionTick must call .checkCollision');
     assert.match(tickBody, /\.applyCollisionResponse\s*\(/, 'runCollisionTick must call .applyCollisionResponse');
   });
 
   it('runCollisionTick iterates over multiple cars in a pairwise collision sweep', () => {
-    const tickIdx = source.indexOf('runCollisionTick');
-    const tickBody = extractBody(source, source.indexOf('{', tickIdx));
+    const defRe = /runCollisionTick\s*\(\s*\)\s*\{/g;
+    const m = defRe.exec(source);
+    assert.ok(m, 'src/game.js must define runCollisionTick');
+    const openIdx = m.index + m[0].length - 1;
+    const tickBody = extractBody(source, openIdx);
     assert.ok(tickBody, 'runCollisionTick body must parse');
     assert.match(tickBody, /for\s*\([\s\S]*?j\s*=\s*i\s*\+\s*1[\s\S]*?\)/,
       'runCollisionTick must loop pairwise (j = i + 1) over all live cars');
