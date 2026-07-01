@@ -99,6 +99,14 @@ class CyberpunkRaceClient {
         break;
 
       case 'opponent_left':
+        // Opponent disconnected — player wins by default
+        if (this.game && this.game.isRunning) {
+          this.game.isRunning = false;
+          this.game.onRaceEnd(true); // Player wins
+          // Show a notification
+          const hud = document.getElementById('lap-current');
+          if (hud) hud.textContent = 'YOU WIN — OPPONENT LEFT';
+        }
         break;
 
       case 'error':

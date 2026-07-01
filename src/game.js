@@ -153,7 +153,7 @@ export class Game {
 
     const s = dt * 60; // scale to 60fps baseline
     this.aiCar.rotation += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), 0.05 * s);
-    this.aiCar.velocity = 0.8;
+    this.aiCar.velocity = 1.05; // Competitive: player maxSpeed is 1.2, AI should challenge but not dominate
 
     this.aiCar.mesh.position.x += Math.sin(this.aiCar.rotation) * this.aiCar.velocity * s;
     this.aiCar.mesh.position.z += Math.cos(this.aiCar.rotation) * this.aiCar.velocity * s;
