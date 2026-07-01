@@ -162,6 +162,28 @@ function validateNumber(val, min, max) {
   return isNaN(n) || !isFinite(n) || n < min || n > max ? null : n;
 }
 
+function validateInput(input) {
+  if (!input || typeof input !== 'object') return { valid: false, error: 'missing input' };
+  const { throttle, brake, steer, seq, dt } = input;
+
+  if (!Number.isFinite(throttle) || throttle < 0 || throttle > 1) {
+    return { valid: false, error: 'invalid throttle' };
+  }
+  if (!Number.isFinite(brake) || brake < 0 || brake > 1) {
+    return { valid: false, error: 'invalid brake' };
+  }
+  if (!Number.isFinite(steer) || steer < -1 || steer > 1) {
+    return { valid: false, error: 'invalid steer' };
+  }
+  if (!Number.isFinite(seq) || seq < 0 || !Number.isInteger(seq)) {
+    return { valid: false, error: 'invalid seq' };
+  }
+  if (!Number.isFinite(dt) || dt < 0 || dt > 0.1) {
+    return { valid: false, error: 'invalid dt' };
+  }
+  return { valid: true };
+}
+
 // Rate limiting
 const msgRateLimit = new WeakMap();
 const RATE_WINDOW_MS = 1000;
@@ -174,6 +196,9 @@ wss.on('connection', (ws) => {
   ws.lap = 1;
   ws.lastZ = -201; // Start BEFORE finish line — first forward crossing (to -200) IS detected
   ws.finished = false;
+  ws.lastSeq = -1; // For sequence ordering check
+  ws.lastInputRateReset = Date.now() + RATE_WINDOW_MS;
+  ws.inputCount = 0;
   msgRateLimit.set(ws, { count: 0, resetAt: Date.now() + RATE_WINDOW_MS });
 
   ws.on('pong', () => { ws.isAlive = true; });
@@ -269,6 +294,57 @@ wss.on('connection', (ws) => {
             }
           }
         }
+      }
+    }
+
+    // --- Bug #1 fix: input message (server-authoritative inputs) ---
+    // Preferred path over 'position' — client sends inputs, server simulates
+    if (msg.type === 'input') {
+      // Input flood detection (>60 inputs/s)
+      const now = Date.now();
+      if (now > ws.lastInputRateReset) {
+        ws.inputCount = 0;
+        ws.lastInputRateReset = now + RATE_WINDOW_MS;
+      }
+      ws.inputCount++;
+      if (ws.inputCount > 60) {
+        ws.send(JSON.stringify({ type: 'error', msg: 'Input flood detected' }));
+        ws.terminate();
+        return;
+      }
+
+      // Validate input
+      const validation = validateInput(msg.input);
+      if (!validation.valid) {
+        ws.send(JSON.stringify({ type: 'error', msg: validation.error }));
+        return;
+      }
+
+      // Out-of-order sequence check
+      const seq = msg.input.seq;
+      if (seq <= ws.lastSeq) {
+        ws.send(JSON.stringify({ type: 'error', msg: 'Out-of-order input' }));
+        return;
+      }
+      ws.lastSeq = seq;
+
+      // Input is valid — broadcast acknowledgment snapshot
+      // The server will apply physics based on these inputs in the next tick
+      const snapshot = {
+        type: 'input_ack',
+        seq,
+        throttle: msg.input.throttle,
+        brake: msg.input.brake,
+        steer: msg.input.steer,
+        dt: msg.input.dt
+      };
+      if (ws.isAIMode) {
+        // AI mode: relay to other AI clients
+        aiModeClients.forEach(client => {
+          if (client !== ws && client.readyState === 1) client.send(JSON.stringify(snapshot));
+        });
+      } else if (ws.roomId) {
+        broadcastToRoom(ws.roomId, snapshot, ws);
       }
     }
   });
