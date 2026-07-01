@@ -48,9 +48,61 @@ Visual overhaul must:
 - Have a visual diff committed (before/after screenshots in `docs/`).
 - Pass accessibility check: contrast ≥ 4.5:1 for HUD text against track.
 
-## 5. Out of Scope (Defer)
+## 5. Technical Implementation Plan (from research)
+
+### 5.1 Bug #1 — "Invalid position data"
+**Root cause confirmed:** Server's `validateNumber(x, -X, +X)` in `src/server.js:230-237` rejects when client sends NaN/Infinity (post-race state, car.js stops publishing).
+**Fix:** Send **inputs, not positions**. Client → server: `{throttle, brake, steer, seq, dt}`. Server validates `Number.isFinite()` + range. Server broadcasts authoritative snapshot.
+**Migration:** Keep current `move` message during transition, add `input` as preferred path, then deprecate `move`.
+
+### 5.2 Bug #3 — Car-vs-car collision
+**Recommendation:** **Rapier 3D** (`@dimforge/rapier3d-compat`, ~5MB WASM, deterministic).
+- Server runs authoritative Rapier step at 60Hz
+- Client runs kinematic interpolation (no physics needed on client for ≤8 players)
+- Use `RAPIER.ColliderDesc.cuboid(1.0, 0.4, 2.0)` per car chassis
+- If Rapier too heavy for the slice scope: fallback to **AABB narrow-phase** (60 lines, no deps)
+
+### 5.3 Bug #2 + #4 — Track bounds + wrong-way
+**Recommendation:** **Off-track slowdown** (grass = 0.25× engine force), no invisible walls.
+- Define track polygon (ring of {x,z}, baked width)
+- `pointInPolygon()` check per tick → `speedMultiplier = grassSlowdown`
+- "Wrong way" detection via spline `t` parameter Δ < -0.05 for > 30 frames
+- Stuck reset (>3s off-track at <1m/s) → snap to nearest valid spline point
+
+### 5.4 Bug #5 — Lap + ranking
+**Recommendation:** Replace `lastZ` with **checkpoint array + spline progress**.
+- 4 checkpoints around oval (start/finish + 3 splits)
+- Each car: `{lap, nextCheckpoint, t ∈ [0,1), lastT}`
+- Lap credits only when `nextCheckpoint` cycles through ALL in order
+- Ranking: `total = lap + t`, sort desc
+- `wrapDelta(u - lastT)` handles wrap-around + detects wrong-way
+
+### 5.5 Visual / UX Overhaul — Phase 1 Quick Wins
+See companion `references/design-doc.md` (in sprint-5-spec repo).
+1. EffectComposer pipeline (RenderPass → UnrealBloomPass → FilmPass → OutputPass)
+2. Palette A (Classic Synthwave): #0A0E27 / #FF006E / #9D4EDD / #00F5FF
+3. Orbitron + Rajdhani + VT323 via Google Fonts CDN
+4. 4-corner HUD layout (Position TL, Lap TR, Speed arc BR, Mini-map BL)
+5. Cars: MeshStandardMaterial body + wireframe overlay + TubeGeometry light trail (meshline package)
+6. Track: neon edges, scrolling grid floor, holographic checkpoints, synthwave sun, speed-line particles
+
+## 6. Slice 5 Definition
+
+**Slice 5 — "Robust Race + Cyberpunk Style"** implements all 5 bugs + visual overhaul in one vertical slice.
+
+**Sub-slices (each shippable independently):**
+- 5a: Bug #1 (server-authoritative inputs) + tests
+- 5b: Bug #5 (checkpoint-based lap/ranking) + tests
+- 5c: Bugs #2+#4 (track bounds + wrong-way) + tests
+- 5d: Bug #3 (Rapier OR AABB collision) + tests
+- 5e: Visual overhaul (Phase 1 quick wins)
+
+**Test discipline (lesson from Slice 4):** Tests FIRST, then code. Run `npm test` after each sub-slice. 100% green before moving on.
+
+## 7. Out of Scope (Defer to Slice 6+)
 
 - Multiplayer > 2 players
 - Power-ups / weapons
 - AI difficulty levels
 - Mobile/touch controls
+- Replay system
