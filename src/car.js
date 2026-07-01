@@ -311,8 +311,24 @@ export class Car {
     if (this.offTrack) {
       this.speedMultiplier = 0.25;
       this.offTrackStreak++;
+
+      // Sprint 6 Fix C: actively push the car back toward the nearest
+      // valid track point while it is off-track.  The previous behaviour
+      // only snapped the car after it had been STUCK for 90 ticks
+      // (~1.5 s), which let a fast car drive far outside the track.
+      // The push is small per frame so it still feels like a wall.
+      const safe = nearestValidSplinePoint(x, z);
+      const dx = safe.x - x;
+      const dz = safe.z - z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 0.01) {
+        // Move 15% of the way back each frame; cap at 0.6 units.
+        const step = Math.min(0.6, dist * 0.15);
+        this.mesh.position.x += (dx / dist) * step;
+        this.mesh.position.z += (dz / dist) * step;
+      }
+
       if (Math.abs(this.velocity) * 300 < 1 && this.offTrackStreak > 90) {
-        const safe = nearestValidSplinePoint(x, z);
         this.mesh.position.x = safe.x;
         this.mesh.position.z = safe.z;
         this.offTrackStreak = 0;

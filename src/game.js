@@ -4,7 +4,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { FilmPass } from 'three/addons/postprocessing/FilmPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { createTrack, createFinishLine, WAYPOINTS, TRACK_LENGTH } from './track.js';
+import { createTrack, createFinishLine, createCheckpointRings, updateCheckpointRings, flashCheckpoint, WAYPOINTS, TRACK_LENGTH } from './track.js';
 import { Car } from './car.js';
 import { Controls } from './controls.js';
 
@@ -74,9 +74,11 @@ export class Game {
     this.scene.add(pointLight2);
 
     this.createSynthwaveSun();
+    this.createDirectionalArrow();
 
     this.track = createTrack(this.scene);
     this.finishLine = createFinishLine(this.scene);
+    this.checkpointRings = createCheckpointRings(this.scene);
 
     this.controls = new Controls();
 
@@ -132,6 +134,66 @@ export class Game {
     this.sunMaterial = sunMat;
   }
 
+  // Sprint 6 Fix D: a giant 3D arrow that hovers above the player car
+  // and points at the next checkpoint.  When the player is going the
+  // wrong way (wrongWayStreak > 30) the arrow is red and pulses.
+  createDirectionalArrow() {
+    const group = new THREE.Group();
+    group.name = 'directionalArrow';
+
+    // Cone + cylinder, like a fat arrow.  Faces -Z by default (so we
+    // rotate it via lookAt() to point at the next checkpoint).
+    const shaftGeo = new THREE.CylinderGeometry(0.6, 0.6, 6, 8);
+    const headGeo  = new THREE.ConeGeometry(2.0, 3, 8);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x00F5FF,
+      transparent: true,
+      opacity: 0.9,
+      toneMapped: false
+    });
+    const shaft = new THREE.Mesh(shaftGeo, mat);
+    shaft.position.y = 3;
+    shaft.rotation.x = Math.PI / 2; // align along Z
+    const head = new THREE.Mesh(headGeo, mat);
+    head.position.z = 4.5; // tip of the arrow
+    head.rotation.x = Math.PI / 2;
+    group.add(shaft, head);
+
+    // Carry the colour and visibility on the group so we can toggle.
+    group.userData.mat = mat;
+    group.userData.lastWrongWay = false;
+
+    this.scene.add(group);
+    this.directionalArrow = group;
+  }
+
+  updateDirectionalArrow(playerCar) {
+    if (!this.directionalArrow || !playerCar) return;
+    const arrow = this.directionalArrow;
+    const checkpoints = this.checkpointRings.userData.checkpoints;
+    const nextCp = checkpoints[playerCar.nextCheckpoint];
+    // Place the arrow above the player car and aim at next checkpoint.
+    const px = playerCar.mesh.position.x;
+    const pz = playerCar.mesh.position.z;
+    arrow.position.set(px, 8, pz);
+    const dx = nextCp.x - px;
+    const dz = nextCp.z - pz;
+    // lookAt-style rotation: arrow's -Z axis should point at the target.
+    arrow.rotation.y = Math.atan2(dx, dz);
+    // Hide when close to checkpoint (< 8 units) — driver knows where to go.
+    const dist = Math.hypot(dx, dz);
+    arrow.visible = dist > 8;
+
+    // Pulse red when going the wrong way.
+    const wrongWay = playerCar.wrongWayStreak > 30;
+    if (wrongWay !== arrow.userData.lastWrongWay) {
+      arrow.userData.mat.color.setHex(wrongWay ? 0xFF006E : 0x00F5FF);
+      arrow.userData.lastWrongWay = wrongWay;
+    }
+    const pulse = 1 + 0.15 * Math.sin(performance.now() * 0.01);
+    arrow.scale.set(pulse, pulse, pulse);
+  }
+
   startMode(mode) {
     this.mode = mode;
     this.isRunning = true;
@@ -162,8 +224,14 @@ export class Game {
     this.lastTime = now;
 
     const input = this.controls.getInput();
+    // Sprint 6 Fix B: snapshot nextCheckpoint before update() so we can
+    // detect a "just crossed" event and flash the corresponding ring.
+    const prevPlayerCp = this.playerCar.nextCheckpoint;
     this.playerCar.update(input, dt);
     this.playerCar.checkLap();
+    if (this.playerCar.nextCheckpoint !== prevPlayerCp) {
+      flashCheckpoint(this.checkpointRings, prevPlayerCp, now);
+    }
 
     this.updateCamera();
 
@@ -177,8 +245,12 @@ export class Game {
       // we pass a synthetic forward=input into update() so the standard
       // physics pipeline moves the mesh.
       if (!this.aiCar.finished) {
+        const prevAiCp = this.aiCar.nextCheckpoint;
         this.aiCar.update({ forward: true, backward: false, left: false, right: false }, dt);
         this.aiCar.checkLap();
+        if (this.aiCar.nextCheckpoint !== prevAiCp) {
+          flashCheckpoint(this.checkpointRings, prevAiCp, now);
+        }
       }
 
       this.playerProgress = this.playerCar.getProgress();
@@ -189,6 +261,12 @@ export class Game {
     // The collision logic lives in src/car.js but the game loop never
     // called it.  Walk every pair of live cars and resolve any overlap.
     this.runCollisionTick();
+
+    // Sprint 6 Fix B: per-frame checkpoint ring update (color/scale).
+    updateCheckpointRings(this.checkpointRings, now);
+
+    // Sprint 6 Fix D: 3D arrow above player car pointing to next checkpoint.
+    this.updateDirectionalArrow(this.playerCar);
 
     if (this.sunMaterial) {
       this.sunMaterial.uniforms.uTime.value = now * 0.001;

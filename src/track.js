@@ -134,6 +134,22 @@ export function createTrack(scene) {
     const barrier2 = new THREE.Mesh(barrierGeo, barrierMatMagenta);
     barrier2.position.set(xInner, BARRIER_HEIGHT / 2, zInner);
     trackGroup.add(barrier2);
+
+    // === Sprint 6 Fix C: invisible collider wall segments ===
+    // Same x/z as the visible barrier, but with visible=false and a
+    // userData tag so the game loop can resolve wall hits.
+    const colliderGeo = new THREE.BoxGeometry(1.2, BARRIER_HEIGHT, 1.2);
+    const colliderMat = new THREE.MeshBasicMaterial({ visible: false });
+    const wallOuter = new THREE.Mesh(colliderGeo, colliderMat);
+    wallOuter.position.set(xOuter, BARRIER_HEIGHT / 2, zOuter);
+    wallOuter.userData.isWall = true;
+    wallOuter.userData.normalAngle = t; // radial outward normal
+    trackGroup.add(wallOuter);
+    const wallInner = new THREE.Mesh(colliderGeo.clone(), colliderMat);
+    wallInner.position.set(xInner, BARRIER_HEIGHT / 2, zInner);
+    wallInner.userData.isWall = true;
+    wallInner.userData.normalAngle = t + Math.PI; // radial inward
+    trackGroup.add(wallInner);
   }
 
   // === SUPPORT PILLARS WITH LIGHTS ===
@@ -239,4 +255,75 @@ export function createFinishLine(scene) {
   scene.add(gateGroup);
 
   return gateGroup;
+}
+
+// === CHECKPOINT RINGS (Fix B) ===
+// 4 cyan torus rings at the 4 CHECKPOINTS positions. When a car
+// crosses one, the ring flashes magenta + briefly enlarges.
+const CHECKPOINTS = [
+  { id: 0, x: 0,   z: -200, r: 15 },
+  { id: 1, x: 30,  z: 0,    r: 15 },
+  { id: 2, x: 0,   z: 200,  r: 15 },
+  { id: 3, x: -30, z: 0,    r: 15 }
+];
+
+export function createCheckpointRings(scene) {
+  const group = new THREE.Group();
+  group.name = 'checkpoints';
+  group.userData.rings = [];
+  group.userData.checkpoints = CHECKPOINTS;
+
+  for (const cp of CHECKPOINTS) {
+    // Two stacked tori for a thicker neon look
+    const ringGeo = new THREE.TorusGeometry(12, 0.4, 8, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x00F5FF,            // cyan
+      transparent: true,
+      opacity: 0.85,
+      toneMapped: false          // unaffected by tone-mapping for max neon
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.set(cp.x, 3, cp.z);
+    ring.rotation.x = Math.PI / 2; // face up (so the ring is horizontal)
+    ring.userData.checkpointId = cp.id;
+    ring.userData.flashUntil = 0;
+    ring.userData.baseScale = 1;
+    group.add(ring);
+    group.userData.rings.push(ring);
+
+    // A second torus rotated 90° for a more visible "tube" silhouette
+    const ring2 = new THREE.Mesh(ringGeo.clone(), ringMat.clone());
+    ring2.position.set(cp.x, 3, cp.z);
+    ring2.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+    group.add(ring2);
+  }
+
+  scene.add(group);
+  return group;
+}
+
+// Trigger a flash on the ring just hit.
+export function flashCheckpoint(ringGroup, checkpointId, now = performance.now()) {
+  for (const r of ringGroup.userData.rings) {
+    if (r.userData.checkpointId === checkpointId) {
+      r.userData.flashUntil = now + 500; // 500ms flash
+    }
+  }
+}
+
+// Per-frame update: any ring whose flashUntil is in the future pulses
+// pink + slightly larger; all others stay cyan.
+export function updateCheckpointRings(ringGroup, now = performance.now()) {
+  for (const r of ringGroup.userData.rings) {
+    const flashing = now < (r.userData.flashUntil || 0);
+    if (flashing) {
+      r.material.color.setHex(0xFF006E); // magenta
+      const t = (r.userData.flashUntil - now) / 500;
+      const s = 1.0 + 0.4 * t;           // shrinks as it decays
+      r.scale.set(s, s, s);
+    } else {
+      r.material.color.setHex(0x00F5FF); // cyan
+      r.scale.set(1, 1, 1);
+    }
+  }
 }

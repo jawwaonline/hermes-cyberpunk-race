@@ -104,13 +104,25 @@
 
     #hud-wrongway {
       position: absolute;
-      bottom: 120px; left: 50%; transform: translateX(-50%);
-      font-family: 'VT323', monospace; font-size: 3rem;
-      color: var(--pink); text-shadow: 0 0 20px var(--pink);
+      bottom: 140px; left: 50%; transform: translateX(-50%);
+      font-family: 'VT323', monospace; font-size: 4.5rem;
+      color: var(--pink); text-shadow: 0 0 20px var(--pink), 0 0 40px var(--pink);
       opacity: 0; transition: opacity 0.2s;
-      text-transform: uppercase; letter-spacing: 0.2em;
+      text-transform: uppercase; letter-spacing: 0.25em;
+      font-weight: bold;
+      pointer-events: none;
     }
-    #hud-wrongway.visible { opacity: 1; }
+    #hud-wrongway.visible { opacity: 1; animation: wrongway-pulse 0.5s ease-in-out infinite; }
+    #hud-wrongway .arrow {
+      display: inline-block;
+      margin: 0 0.5em;
+      font-size: 5rem;
+      vertical-align: middle;
+    }
+    @keyframes wrongway-pulse {
+      0%, 100% { transform: translateX(-50%) scale(1); filter: brightness(1); }
+      50%      { transform: translateX(-50%) scale(1.08); filter: brightness(1.4); }
+    }
 
     .hud-controls {
       font-family: 'Rajdhani', sans-serif;
@@ -191,7 +203,7 @@
       </svg>
       <div class="hud-controls">WASD / Arrows</div>
     </div>
-    <div id="hud-wrongway">[ WRONG WAY ]</div>
+    <div id="hud-wrongway"><span class="arrow">↶</span>WRONG WAY<span class="arrow">↷</span></div>
   </div>
 
   <div id="end-screen">
