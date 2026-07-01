@@ -234,17 +234,27 @@ Björn will ein spielbares 3D-Rennspiel im Browser mit Cyberpunk-Look. Kein Chat
 
 ## 4. Vision
 ### Must Have
-- [ ] Cyberpunk-inspirierte 3D-Rennstrecke (dunkel, Neon-Elemente)
-- [ ] Player-Car mit Lenkung (Pfeiltasten / WASD)
-- [ ] KI-Gegner mit einfachem Pathfinding
-- [ ] Human vs Human Modus: WebSocket-Warteraum, 2. Spieler startet das Rennen
-- [ ] Human vs AI Modus: sofortiger Start gegen KI
-- [ ] Runden-basiertes Rennergebnis (Wer finishet zuerst 3 Runden?)
+- [x] Cyberpunk-inspirierte 3D-Rennstrecke (dunkel, Neon-Elemente) ✅ — Slice 5 visual overhaul
+- [x] Player-Car mit Lenkung (Pfeiltasten / WASD) ✅ — was working before Slice 5
+- [x] KI-Gegner mit einfachem Pathfinding ✅ — was working before Slice 5
+- [x] Human vs Human Modus: WebSocket-Warteraum, 2. Spieler startet das Rennen ✅ — was working before Slice 5
+- [x] Human vs AI Modus: sofortiger Start gegen KI ✅ — was working before Slice 5
+- [x] Runden-basiertes Rennergebnis (Wer finishet zuerst 3 Runden?) ✅ — Slice 5: checkpoint lap + server-auth
 
 ### Should Have
-- [ ] Neon-Glow-Effekte auf der Strecke
-- [ ] Minimap
-- [ ] Runden-Anzeige / Positionsanzeige
+- [x] Neon-Glow-Effekte auf der Strecke ✅ — Slice 5e: EffectComposer UnrealBloomPass + emissiveIntensity 1.2
+- [x] Minimap ✅ — Slice 5e: 4-corner HUD with SVG minimap (bottom-left)
+- [x] Runden-Anzeige / Positionsanzeige ✅ — Slice 5b: checkpoint-based reliable ranking
+
+### Slice 5 — Robust Race + Cyberpunk Style (2026-07-01)
+**Sub-slices delivered:**
+- 5a: Bug #1 — Server-authoritative `input` validation (`Number.isFinite()`, rate limiting 60/s)
+- 5b: Bug #5 — Checkpoint-array lap + `total = lap + t` ranking (replaces broken `lastZ`-based `getProgress()`)
+- 5c: Bugs #2+#4 — Ellipse-normal track polygon, `pointInPolygon` off-track detection, `speedMultiplier=0.25` off-track, stuck reset, `wrongWayStreak` HUD
+- 5d: Bug #3 — AABB car-vs-car collision (`computeCarAABB`, `boxesOverlap`, `checkCarCollision`, `applyCollisionResponse`)
+- 5e: Visual Overhaul — EffectComposer(RenderPass→UnrealBloom→FilmPass→OutputPass), Palette A(#0A0E27/#FF006E/#9D4EDD/#00F5FF), Google Fonts(Orbitron/Rajdhani/VT323/Audiowide), 4-corner HUD, synthwave sun shader sphere, per-car TubeGeometry light trails
+
+**89 tests green** across validation, checkpoint, track-bounds, and collision test suites.
 
 ### Innovative Ideas
 - [ ] Synthwave-Musik per Web Audio API
@@ -501,13 +511,13 @@ The `lastZ` value is initialized to the finish line z, which causes the first-la
 | P0-1 | CRITICAL | `finished` unvalidated | server.js:232 | ✅ FIXED (af98f42) — server tracks lap/finished |
 | P0-2 | CRITICAL | Room lock race condition | server.js:199-209 | ✅ FIXED (42a9440) — locked mutex added |
 | P0-3 | CRITICAL | Room deleted while players active | server.js:241-249 | ✅ FIXED (42a9440) — 5s delay before delete |
-| P0-4 | CRITICAL | Backwards lap exploit | car.js:152 | ✅ FIXED (af98f42) — forward-only detection |
+| P0-4 | CRITICAL | Backwards lap exploit | car.js:152 | ✅ FIXED (5c) — checkpoint-array lap, no z-crossing |
 | P0-5 | CRITICAL | Global AI state shared across clients | server.js:61-66 | ✅ FIXED (42a9440) — per-ws isAIMode flag |
 | P0-6 | CRITICAL | No WebSocket auth/session binding | server.js:164+ | ⚠️ NOT FIXED — requires token auth |
-| P1-1 | HIGH | `lastZ` init causes first lap to not count | car.js:18,75 | ✅ FIXED (af98f42) — lastZ=-201 |
+| P1-1 | HIGH | `lastZ` init causes first lap to not count | car.js:18,75 | ✅ FIXED (5c) — checkpoint-based lap, no lastZ |
 | P1-2 | HIGH | AI max speed 0.8 vs player 1.2 | game.js:156 | ✅ FIXED (d7db228) — 1.05 |
-| P1-3 | HIGH | `getProgress()` broken for off-track | car.js:131-141 | ⚠️ NOT FIXED — position display unreliable |
-| P1-4 | HIGH | No collision detection | car.js | ⚠️ NOT FIXED — out of scope |
+| P1-3 | HIGH | `getProgress()` broken for off-track | car.js:131-141 | ✅ FIXED (5b) — checkpoint-array ranking, `total = lap + t` |
+| P1-4 | HIGH | No collision detection | car.js | ✅ FIXED (5d) — AABB collision with applyCollisionResponse |
 | P1-5 | HIGH | `opponent_left` empty no-op | client.js:101-102 | ✅ FIXED (d7db228) — player wins |
 | P1-6 | HIGH | Restart orphans opponent | client.js:176-197 | ⚠️ NOT FIXED — known limitation |
 | P1-7 | HIGH | State not reset on backToMenu | client.js:199-215 | ⚠️ NOT FIXED — cosmetic |
@@ -520,8 +530,8 @@ The `lastZ` value is initialized to the finish line z, which causes the first-la
 | P2-7 | MEDIUM | HUD update in position interval | client.js:172 | ⚠️ NOT FIXED |
 | P2-8 | MEDIUM | `aiModeClients` stale entries | server.js:61,265 | ⚠️ NOT FIXED |
 | P3-1 | LOW | `isCurveAhead()` unused | game.js:194-195 | ⚠️ NOT FIXED |
-| P3-2 | LOW | No minimap | missing | ⚠️ NOT FIXED |
-| P3-3 | LOW | Position display unreliable | car.js | ⚠️ NOT FIXED |
+| P3-2 | LOW | No minimap | missing | ✅ FIXED (5e) — SVG minimap in HUD bottom-left |
+| P3-3 | LOW | Position display unreliable | car.js | ✅ FIXED (5b) — checkpoint-based `total = lap + t` |
 | P3-4 | LOW | No audio | missing | ⚠️ NOT FIXED |
 | P3-5 | LOW | Start position asymmetry | car.js:74 | ⚠️ NOT FIXED |
 
@@ -538,6 +548,13 @@ The `lastZ` value is initialized to the finish line z, which causes the first-la
 - 42a9440: P0 Grill-Me bugs — AI sync, room race condition, hideEndScreen, room cleanup
 - af98f42: Server-side lap/finished tracking, backwards lap exploit fixed
 - d7db228: AI speed balanced (0.8→1.05), opponent_left handler added
+- 5a-5e (2026-07-01): Slice 5 — Robust Race + Cyberpunk Style:
+  - 5a: Server-auth input validation + rate limiting
+  - 5b: Checkpoint-array lap + reliable ranking
+  - 5c: Track bounds + wrong-way detection
+  - 5d: AABB car-vs-car collision
+  - 5e: Visual overhaul — EffectComposer bloom, Palette A, 4-corner HUD, synthwave sun, light trails
+  - 89 tests green
 
 ---
 
