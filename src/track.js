@@ -5,10 +5,12 @@ export { TRACK_WIDTH, TRACK_LENGTH, WAYPOINTS };
 
 export const BARRIER_HEIGHT = 2;
 
-const CYAN = 0x00ffff;
-const MAGENTA = 0xff00ff;
-const YELLOW = 0xffff00;
-const TRACK_COLOR = 0x1a1a2e;
+const CYAN = 0x00F5FF;
+const MAGENTA = 0xFF006E;
+const PURPLE = 0x9D4EDD;
+const YELLOW = 0xFFFF00;
+const TRACK_COLOR = 0x0A0E27;
+const DEEP_BLUE = 0x0A0E27;
 
 export function createTrack(scene) {
   const trackGroup = new THREE.Group();
@@ -17,7 +19,7 @@ export function createTrack(scene) {
   // === GROUND PLANE ===
   const groundGeo = new THREE.PlaneGeometry(600, 600);
   const groundMat = new THREE.MeshStandardMaterial({
-    color: 0x0a0a0f,
+    color: DEEP_BLUE,
     roughness: 0.9,
     metalness: 0.1
   });
@@ -98,14 +100,14 @@ export function createTrack(scene) {
   const barrierMatCyan = new THREE.MeshStandardMaterial({
     color: CYAN,
     emissive: CYAN,
-    emissiveIntensity: 0.8,
+    emissiveIntensity: 1.2,
     roughness: 0.2,
     metalness: 0.8
   });
   const barrierMatMagenta = new THREE.MeshStandardMaterial({
     color: MAGENTA,
     emissive: MAGENTA,
-    emissiveIntensity: 0.8,
+    emissiveIntensity: 1.2,
     roughness: 0.2,
     metalness: 0.8
   });
@@ -137,9 +139,9 @@ export function createTrack(scene) {
   // === SUPPORT PILLARS WITH LIGHTS ===
   const pillarGeo = new THREE.CylinderGeometry(0.3, 0.3, 8, 8);
   const pillarMat = new THREE.MeshStandardMaterial({
-    color: 0x1a1a2e,
-    emissive: YELLOW,
-    emissiveIntensity: 0.3
+    color: 0x1A1A2E,
+    emissive: PURPLE,
+    emissiveIntensity: 0.5
   });
 
   const PILLAR_COUNT = 16;

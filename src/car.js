@@ -170,17 +170,17 @@ export class Car {
     this.wasMovingForward = false;
 
     const bodyMat = new THREE.MeshStandardMaterial({
-      color: isPlayer ? 0x1a1a2e : 0x2e1a2e,
-      emissive: color,
-      emissiveIntensity: 0.3,
-      roughness: 0.3,
-      metalness: 0.8
+      color: 0x1A1A2E,
+      emissive: 0xFF006E,
+      emissiveIntensity: 0.35,
+      roughness: 0.25,
+      metalness: 0.85
     });
 
     const accentMat = new THREE.MeshStandardMaterial({
       color: color,
       emissive: color,
-      emissiveIntensity: 0.8,
+      emissiveIntensity: 1.2,
       roughness: 0.2,
       metalness: 0.9
     });
@@ -207,11 +207,24 @@ export class Car {
     front.position.set(0, 0.5, 2);
     this.mesh.add(front);
 
+    const wireframeMat = new THREE.MeshBasicMaterial({
+      color: color,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.9
+    });
+    const bodyWire = new THREE.Mesh(bodyGeo.clone(), wireframeMat);
+    bodyWire.position.y = 0.5;
+    this.mesh.add(bodyWire);
+    const cabinWire = new THREE.Mesh(cabinGeo.clone(), wireframeMat);
+    cabinWire.position.set(0, 1, -0.3);
+    this.mesh.add(cabinWire);
+
     const lightGeo = new THREE.BoxGeometry(0.4, 0.2, 0.1);
     const lightMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       emissive: 0xffffff,
-      emissiveIntensity: 1
+      emissiveIntensity: 2
     });
     const leftLight = new THREE.Mesh(lightGeo, lightMat);
     leftLight.position.set(-0.6, 0.5, 2.1);
@@ -221,8 +234,14 @@ export class Car {
     rightLight.position.set(0.6, 0.5, 2.1);
     this.mesh.add(rightLight);
 
-    // Starting position: bottom of oval (waypoint[0] is at z=-200, x=0)
-    // Place player on left side, AI on right side of track
+    this.trailPositions = [];
+    this.trailMesh = null;
+    this.trailMat = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.85
+    });
+
     const startX = isPlayer ? -8 : 8;
     this.mesh.position.set(startX, 0, -200);
     this.startX = startX;
@@ -261,8 +280,27 @@ export class Car {
     this.mesh.position.z += Math.cos(this.rotation) * this.velocity * s;
     this.mesh.rotation.y = this.rotation;
 
+    this.updateTrail();
     this.updateOffTrack();
     this.updateCheckpointAndProgress();
+  }
+
+  updateTrail() {
+    const pos = this.mesh.position;
+    this.trailPositions.push(new THREE.Vector3(pos.x, pos.y + 0.3, pos.z));
+    if (this.trailPositions.length > 30) {
+      this.trailPositions.shift();
+    }
+    if (this.trailMesh) {
+      this.mesh.remove(this.trailMesh);
+      this.trailMesh.geometry.dispose();
+    }
+    if (this.trailPositions.length > 2) {
+      const curve = new THREE.CatmullRomCurve3(this.trailPositions);
+      const tubeGeo = new THREE.TubeGeometry(curve, this.trailPositions.length * 2, 0.08, 6, false);
+      this.trailMesh = new THREE.Mesh(tubeGeo, this.trailMat);
+      this.mesh.add(this.trailMesh);
+    }
   }
 
   updateOffTrack() {
@@ -388,5 +426,11 @@ export class Car {
     this.wasMovingForward = false;
     this.mesh.position.set(this.startX, 0, -200);
     this.mesh.rotation.y = 0;
+    this.trailPositions = [];
+    if (this.trailMesh) {
+      this.mesh.remove(this.trailMesh);
+      this.trailMesh.geometry.dispose();
+      this.trailMesh = null;
+    }
   }
 }

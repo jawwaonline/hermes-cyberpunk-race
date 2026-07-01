@@ -4,50 +4,122 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cyberpunk Race</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Orbitron:wght@500;700&family=Rajdhani:wght@400;500;600&family=VT323&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #0a0a0f; color: #0ff; font-family: 'Courier New', monospace; overflow: hidden; }
+    :root {
+      --cyan: #00F5FF;
+      --pink: #FF006E;
+      --purple: #9D4EDD;
+      --deep: #0A0E27;
+      --white: #FFFFFF;
+    }
+    body { background: var(--deep); color: var(--cyan); font-family: 'Rajdhani', sans-serif; overflow: hidden; }
     #game-container { width: 100vw; height: 100vh; }
 
     #mode-screen {
       position: fixed; inset: 0;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      background: #0a0a0f;
+      background: var(--deep);
       z-index: 100;
     }
     #mode-screen h1 {
-      font-size: 3rem; text-shadow: 0 0 20px #0ff, 0 0 40px #0ff;
+      font-family: 'Audiowide', sans-serif;
+      font-size: 3rem; color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan), 0 0 40px var(--cyan);
       margin-bottom: 3rem; letter-spacing: 0.2em;
     }
     .mode-btn {
       padding: 1rem 2rem; margin: 0.5rem;
-      background: transparent; border: 2px solid #0ff;
-      color: #0ff; font-family: inherit; font-size: 1.2rem;
+      background: transparent; border: 2px solid var(--cyan);
+      color: var(--cyan); font-family: 'Rajdhani', sans-serif; font-size: 1.2rem;
       cursor: pointer; transition: all 0.3s;
       text-transform: uppercase; letter-spacing: 0.1em;
     }
     .mode-btn:hover {
-      background: #0ff; color: #0a0a0f;
-      box-shadow: 0 0 30px #0ff;
+      background: var(--cyan); color: var(--deep);
+      box-shadow: 0 0 30px var(--cyan);
     }
     #waiting {
       display: none; margin-top: 2rem;
-      font-size: 1.5rem; text-shadow: 0 0 10px #0ff;
+      font-size: 1.5rem; color: var(--cyan); font-family: 'VT323', monospace;
+      text-shadow: 0 0 10px var(--cyan);
     }
 
     #hud {
       display: none;
-      position: fixed; top: 20px; left: 20px;
-      padding: 1rem; background: rgba(10,10,15,0.85);
-      border: 1px solid #0ff; box-shadow: 0 0 15px rgba(0,255,255,0.3);
-      z-index: 50; min-width: 180px;
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 50;
     }
-    #hud .lap { font-size: 1.4rem; margin-bottom: 0.5rem; }
-    #hud .pos { font-size: 1.2rem; color: #f0f; margin-bottom: 0.5rem; }
-    #hud .speed { font-size: 1rem; color: #ff0; }
-    #hud .controls-hint { font-size: 0.75rem; color: #666; margin-top: 0.5rem; }
-    #hud .version { font-size: 0.65rem; color: #444; margin-top: 0.5rem; }
+    .hud-panel {
+      position: absolute;
+      background: rgba(10, 14, 39, 0.85);
+      border: 1px solid var(--cyan);
+      box-shadow: 0 0 15px rgba(0, 245, 255, 0.3), inset 0 0 20px rgba(0, 245, 255, 0.05);
+      padding: 0.75rem 1rem;
+    }
+    #hud-tl { top: 20px; left: 20px; }
+    #hud-tr { top: 20px; right: 20px; }
+    #hud-br { bottom: 20px; right: 20px; }
+    #hud-bl { bottom: 20px; left: 20px; }
+
+    .hud-pos {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700; font-size: 4rem;
+      color: var(--cyan); line-height: 1;
+      text-shadow: 0 0 20px var(--cyan);
+    }
+    .hud-pos-label {
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 500; font-size: 0.9rem;
+      color: rgba(0, 245, 255, 0.6); text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .hud-lap {
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 600; font-size: 1.5rem;
+      color: var(--pink); text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .hud-lap span { font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 2rem; }
+    .hud-lap-label {
+      font-size: 0.75rem; color: rgba(255, 0, 110, 0.6);
+      text-transform: uppercase; letter-spacing: 0.1em;
+    }
+
+    .hud-speed {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 500; font-size: 2.5rem;
+      color: var(--cyan); text-align: right;
+      text-shadow: 0 0 15px var(--cyan);
+    }
+    .hud-speed-label {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 0.75rem; color: rgba(0, 245, 255, 0.6);
+      text-transform: uppercase; letter-spacing: 0.1em; text-align: right;
+    }
+
+    #hud-wrongway {
+      position: absolute;
+      bottom: 120px; left: 50%; transform: translateX(-50%);
+      font-family: 'VT323', monospace; font-size: 3rem;
+      color: var(--pink); text-shadow: 0 0 20px var(--pink);
+      opacity: 0; transition: opacity 0.2s;
+      text-transform: uppercase; letter-spacing: 0.2em;
+    }
+    #hud-wrongway.visible { opacity: 1; }
+
+    .hud-controls {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 0.7rem; color: rgba(0, 245, 255, 0.4);
+      margin-top: 0.5rem; text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
 
     #version-badge {
       position: fixed; bottom: 8px; right: 12px;
@@ -58,29 +130,31 @@
     #end-screen {
       display: none;
       position: fixed; inset: 0;
-      background: rgba(10,10,15,0.95);
+      background: rgba(10, 14, 39, 0.95);
       align-items: center; justify-content: center;
       flex-direction: column; z-index: 200;
     }
     #end-screen h2 {
+      font-family: 'Audiowide', sans-serif;
       font-size: 4rem; text-shadow: 0 0 30px currentColor;
       margin-bottom: 2rem;
     }
-    #end-screen.win h2 { color: #0ff; }
-    #end-screen.lose h2 { color: #f0f; }
+    #end-screen.win h2 { color: var(--cyan); }
+    #end-screen.lose h2 { color: var(--pink); }
 
     #scanlines {
       position: fixed; inset: 0; pointer-events: none; z-index: 1000;
       background: repeating-linear-gradient(
         0deg, transparent, transparent 2px,
-        rgba(0,0,0,0.1) 2px, rgba(0,0,0,0.1) 4px
+        rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px
       );
     }
   </style>
   <script type="importmap">
   {
     "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
     }
   }
   </script>
@@ -96,10 +170,30 @@
   </div>
 
   <div id="hud">
-    <div class="lap">Lap <span id="lap-current">1</span>/3</div>
-    <div class="pos">Position: <span id="pos-display">1st</span></div>
-    <div class="speed"><span id="speed-display">0</span> km/h</div>
-    <div class="controls-hint">WASD / ←↑↓→ to steer</div>
+    <div id="hud-tl" class="hud-panel">
+      <div class="hud-pos-label">Position</div>
+      <div class="hud-pos"><span id="pos-display">01</span><span style="font-size:1.5rem;opacity:0.4"> / 02</span></div>
+    </div>
+    <div id="hud-tr" class="hud-panel">
+      <div class="hud-lap-label">Lap</div>
+      <div class="hud-lap"><span id="lap-current">1</span> / <span id="lap-total">3</span></div>
+    </div>
+    <div id="hud-br" class="hud-panel">
+      <div class="hud-speed-label">Speed</div>
+      <div class="hud-speed"><span id="speed-display">0</span></div>
+      <div class="hud-speed-label">km/h</div>
+    </div>
+    <div id="hud-bl" class="hud-panel">
+      <svg width="140" height="140" viewBox="0 0 140 140" id="minimap">
+        <rect width="140" height="140" fill="rgba(10,14,39,0.5)" rx="4"/>
+        <ellipse cx="70" cy="70" rx="25" ry="55" fill="none" stroke="#00F5FF" stroke-width="1" opacity="0.3"/>
+        <ellipse cx="70" cy="70" rx="18" ry="48" fill="none" stroke="#00F5FF" stroke-width="1" opacity="0.3"/>
+        <circle id="minimap-player" cx="70" cy="115" r="4" fill="#FF006E"/>
+        <circle id="minimap-ai" cx="70" cy="25" r="4" fill="#9D4EDD"/>
+      </svg>
+      <div class="hud-controls">WASD / Arrows</div>
+    </div>
+    <div id="hud-wrongway">[ WRONG WAY ]</div>
   </div>
 
   <div id="end-screen">

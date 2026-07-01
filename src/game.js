@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { FilmPass } from 'three/addons/postprocessing/FilmPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { createTrack, createFinishLine, WAYPOINTS, TRACK_LENGTH } from './track.js';
 import { Car } from './car.js';
 import { Controls } from './controls.js';
@@ -25,8 +30,8 @@ export class Game {
 
   init() {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a0a0f);
-    this.scene.fog = new THREE.Fog(0x0a0a0f, 50, 300);
+    this.scene.background = new THREE.Color(0x0A0E27);
+    this.scene.fog = new THREE.Fog(0x0A0E27, 80, 400);
 
     this.camera = new THREE.PerspectiveCamera(
       75,
@@ -39,22 +44,36 @@ export class Game {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.2;
     this.container.appendChild(this.renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight(0x111122, 0.5);
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      1.4, 0.85, 0.0
+    );
+    this.composer.addPass(bloomPass);
+    this.composer.addPass(new FilmPass(0.25, false));
+    this.composer.addPass(new OutputPass());
+
+    const ambientLight = new THREE.AmbientLight(0x1a1a3e, 0.4);
     this.scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    const dirLight = new THREE.DirectionalLight(0x9D4EDD, 0.4);
     dirLight.position.set(50, 100, 50);
     this.scene.add(dirLight);
 
-    const pointLight1 = new THREE.PointLight(0x00ffff, 1, 100);
-    pointLight1.position.set(-20, 20, 0);
+    const pointLight1 = new THREE.PointLight(0x00F5FF, 1.5, 150);
+    pointLight1.position.set(-20, 25, 0);
     this.scene.add(pointLight1);
 
-    const pointLight2 = new THREE.PointLight(0xff00ff, 1, 100);
-    pointLight2.position.set(20, 20, 0);
+    const pointLight2 = new THREE.PointLight(0xFF006E, 1.5, 150);
+    pointLight2.position.set(20, 25, 0);
     this.scene.add(pointLight2);
+
+    this.createSynthwaveSun();
 
     this.track = createTrack(this.scene);
     this.finishLine = createFinishLine(this.scene);
@@ -62,6 +81,55 @@ export class Game {
     this.controls = new Controls();
 
     window.addEventListener('resize', () => this.onResize());
+  }
+
+  createSynthwaveSun() {
+    const sunGroup = new THREE.Group();
+    sunGroup.name = 'synthwaveSun';
+
+    const sunGeo = new THREE.SphereGeometry(120, 32, 32);
+    const sunMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        void main() {
+          vUv = uv;
+          vNormal = normal;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec2 vUv;
+        uniform float uTime;
+        void main() {
+          vec2 uv = vUv;
+          float y = uv.y;
+          vec3 topColor = vec3(0.07, 0.05, 0.24);
+          vec3 midColor = vec3(1.0, 0.0, 0.43);
+          vec3 botColor = vec3(1.0, 0.9, 0.0);
+          vec3 color;
+          if (y > 0.5) {
+            color = mix(midColor, topColor, (y - 0.5) * 2.0);
+          } else {
+            color = mix(botColor, midColor, y * 2.0);
+          }
+          float stripes = step(0.5, y) * step(mod(y * 30.0 - uTime * 0.3, 1.0), 0.5);
+          color = mix(color, vec3(0.04, 0.03, 0.15), stripes * 0.7);
+          float glow = 1.0 - smoothstep(0.0, 0.5, y);
+          color += glow * 0.3;
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `,
+      side: THREE.BackSide
+    });
+    const sun = new THREE.Mesh(sunGeo, sunMat);
+    sun.position.set(0, 0, -400);
+    sunGroup.add(sun);
+    this.scene.add(sunGroup);
+    this.sunMaterial = sunMat;
   }
 
   startMode(mode) {
@@ -90,7 +158,7 @@ export class Game {
     requestAnimationFrame(() => this.animate());
 
     const now = performance.now();
-    const dt = Math.min((now - this.lastTime) / 1000, 0.1); // cap at 100ms to avoid spiral of death
+    const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
 
     const input = this.controls.getInput();
@@ -107,7 +175,12 @@ export class Game {
       this.aiProgress = this.aiCar.getProgress();
     }
 
-    this.renderer.render(this.scene, this.camera);
+    if (this.sunMaterial) {
+      this.sunMaterial.uniforms.uTime.value = now * 0.001;
+    }
+
+    this.updateHUD();
+    this.composer.render();
 
     if (this.playerCar.finished) {
       this.isRunning = false;
@@ -186,6 +259,7 @@ export class Game {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.composer.setSize(window.innerWidth, window.innerHeight);
   }
 
   onRaceEnd(playerWon) {
@@ -242,15 +316,21 @@ export class Game {
   updateHUD() {
     if (!this.playerCar) return;
 
-    const lap = this.playerCar.lap;
-    document.getElementById('lap-current').textContent =
-      lap > this.playerCar.totalLaps ? 'FINISH!' : `${lap}/${this.playerCar.totalLaps}`;
+    const lap = Math.min(this.playerCar.lap + 1, this.playerCar.totalLaps);
+    document.getElementById('lap-current').textContent = lap;
+    document.getElementById('lap-total').textContent = this.playerCar.totalLaps;
     document.getElementById('speed-display').textContent = Math.round(this.playerCar.getSpeed());
 
     if (this.aiCar) {
-      const playerProg = this.playerProgress;
-      const aiProg = this.aiProgress;
-      document.getElementById('pos-display').textContent = playerProg >= aiProg ? '1st' : '2nd';
+      const playerProg = this.playerCar.getRacePosition();
+      const aiProg = this.aiCar.getRacePosition();
+      const pos = playerProg >= aiProg ? 1 : 2;
+      document.getElementById('pos-display').textContent = pos.toString().padStart(2, '0');
+    }
+
+    const wrongWayEl = document.getElementById('hud-wrongway');
+    if (wrongWayEl) {
+      wrongWayEl.classList.toggle('visible', this.playerCar.wrongWayStreak > 30);
     }
   }
 
