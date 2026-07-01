@@ -4,6 +4,11 @@ import {
   showConnectionError, showWaitingTimer, updateWaitingTimer, hideWaitingTimer,
   hideEndScreen
 } from './ui.js';
+import { VERSION } from './version.js';
+
+console.log(`%c[CyberpunkRace] v${VERSION}`, 'color:#0ff;font-weight:bold');
+const badge = document.getElementById('version-badge');
+if (badge) badge.textContent = `v${VERSION}`;
 
 class CyberpunkRaceClient {
   constructor() {
@@ -12,24 +17,9 @@ class CyberpunkRaceClient {
     this.mode = null;
     this.playerIndex = null;
     this.isRaceStarted = false;
-    this.version = null;
     this.waitingTimer = null;
     this.waitingStartTime = null;
-    this.fetchVersion();
     this.initUI();
-  }
-
-  async fetchVersion() {
-    try {
-      const r = await fetch('/api/version');
-      const data = await r.json();
-      this.version = data.version;
-      console.log(`%c[CyberpunkRace] v${this.version}`, 'color:#0ff;font-weight:bold');
-      const badge = document.getElementById('version-badge');
-      if (badge) badge.textContent = `v${this.version}`;
-    } catch {
-      this.version = '?.?.?';
-    }
   }
 
   initUI() {

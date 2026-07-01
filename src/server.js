@@ -4,12 +4,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { WAYPOINTS, TRACK_LENGTH } from './shared-track.js';
+import { VERSION } from './version.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = process.env.PORT || 3000;
-const VERSION = process.env.npm_package_version || '0.0.0';
 
 // --- Static file server with path traversal protection ---
 const ALLOWED_EXTS = new Set(['.html', '.js', '.css', '.json', '.ico', '.png', '.svg', '.woff2']);
