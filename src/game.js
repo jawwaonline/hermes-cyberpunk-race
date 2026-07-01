@@ -263,7 +263,8 @@ export class Game {
     this.runCollisionTick();
 
     // Sprint 6 Fix B: per-frame checkpoint ring update (color/scale).
-    updateCheckpointRings(this.checkpointRings, now);
+    // Wipeout-style 3-level glow: next=full, following=0.4, others=0.2.
+    updateCheckpointRings(this.checkpointRings, now, this.playerCar.nextCheckpoint);
 
     // Sprint 6 Fix D: 3D arrow above player car pointing to next checkpoint.
     this.updateDirectionalArrow(this.playerCar);
@@ -460,6 +461,12 @@ export class Game {
     const wrongWayEl = document.getElementById('hud-wrongway');
     if (wrongWayEl) {
       wrongWayEl.classList.toggle('visible', this.playerCar.wrongWayStreak > 30);
+    }
+
+    // === Sprint 6 UX: Trackmania-style off-track red vignette ===
+    const vignetteEl = document.getElementById('off-track-vignette');
+    if (vignetteEl) {
+      vignetteEl.classList.toggle('visible', !!this.playerCar.offTrack);
     }
   }
 

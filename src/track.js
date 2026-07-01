@@ -313,17 +313,32 @@ export function flashCheckpoint(ringGroup, checkpointId, now = performance.now()
 
 // Per-frame update: any ring whose flashUntil is in the future pulses
 // pink + slightly larger; all others stay cyan.
-export function updateCheckpointRings(ringGroup, now = performance.now()) {
+// Wipeout-style: the *next* ring (nextCheckpoint index) gets full pulse,
+// the *following* ring (nextCheckpoint+1) gets 0.4 intensity,
+// all others get 0.2 (so the player sees a clear "follow this" hierarchy).
+export function updateCheckpointRings(ringGroup, now = performance.now(), nextCheckpoint = -1) {
+  // Compute target intensity for each ring index
+  const getIntensity = (i) => {
+    if (i === nextCheckpoint) return 1.0;        // NEXT — full glow
+    if (nextCheckpoint >= 0 && i === (nextCheckpoint + 1) % ringGroup.userData.checkpoints.length) return 0.4;  // FOLLOWING
+    return 0.2;                                  // others
+  };
+
   for (const r of ringGroup.userData.rings) {
     const flashing = now < (r.userData.flashUntil || 0);
     if (flashing) {
       r.material.color.setHex(0xFF006E); // magenta
       const t = (r.userData.flashUntil - now) / 500;
-      const s = 1.0 + 0.4 * t;           // shrinks as it decays
+      const s = 1.0 + 0.4 * t;
       r.scale.set(s, s, s);
     } else {
       r.material.color.setHex(0x00F5FF); // cyan
       r.scale.set(1, 1, 1);
+      // Wipeout-style 3-level pulse on the NEXT ring
+      const id = r.userData.checkpointId;
+      const target = getIntensity(id);
+      const pulse = target + 0.3 * Math.sin(now * 0.004) * (target > 0.5 ? 1 : 0);
+      r.material.opacity = 0.4 + 0.5 * pulse; // 0.4 (dim) → 0.9 (full pulse)
     }
   }
 }

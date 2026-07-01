@@ -168,6 +168,23 @@
       50%      { transform: translateX(-50%) scale(1.08); filter: brightness(1.4); }
     }
 
+    /* Off-track red vignette (Trackmania-style) — pulses 0.6s cycle */
+    #off-track-vignette {
+      position: fixed; inset: 0; pointer-events: none;
+      box-shadow: inset 0 0 80px 30px rgba(230, 0, 38, 0.65),
+                  inset 0 0 200px 60px rgba(230, 0, 38, 0.25);
+      opacity: 0; transition: opacity 0.15s;
+      z-index: 5;
+    }
+    #off-track-vignette.visible {
+      opacity: 1;
+      animation: vignette-pulse 0.6s ease-in-out infinite;
+    }
+    @keyframes vignette-pulse {
+      0%, 100% { filter: brightness(0.8); }
+      50%      { filter: brightness(1.3); }
+    }
+
     .hud-controls {
       font-family: 'Rajdhani', sans-serif;
       font-size: 0.7rem; color: rgba(0, 245, 255, 0.4);
@@ -264,6 +281,9 @@
       <div class="hud-controls">WASD / Arrows</div>
     </div>
     <div id="hud-wrongway"><span class="arrow">↶</span>WRONG WAY<span class="arrow">↷</span></div>
+
+    <!-- Off-track red vignette (Trackmania-style) — visible only when off-track -->
+    <div id="off-track-vignette"></div>
   </div>
 
   <div id="end-screen">
