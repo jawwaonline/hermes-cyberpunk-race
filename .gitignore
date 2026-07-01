@@ -1,7 +1,6 @@
 node_modules/
-.env
+.DS_Store
 *.log
-*.pid
-data.json
-debug-*.js
-test-*.js
+
+# Generated at build time by scripts/generate-version.js
+src/version.js

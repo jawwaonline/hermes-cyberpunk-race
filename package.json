@@ -5,6 +5,8 @@
   "type": "module",
   "main": "src/server.js",
   "scripts": {
+    "preinstall": "node scripts/generate-version.js",
+    "prestart": "node scripts/generate-version.js",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "lint": "eslint src/ public/",
