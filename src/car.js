@@ -1,6 +1,26 @@
 import * as THREE from 'three';
 import { TRACK_WIDTH, TRACK_LENGTH, WAYPOINTS } from './shared-track.js';
 
+const CHECKPOINTS = [
+  { id: 0, x: 0, z: -200, r: 15 },
+  { id: 1, x: 30, z: 0, r: 15 },
+  { id: 2, x: 0, z: 200, r: 15 },
+  { id: 3, x: -30, z: 0, r: 15 }
+];
+
+function wrapDelta(d) {
+  if (d > 0.5) return d - 1;
+  if (d < -0.5) return d + 1;
+  return d;
+}
+
+function projectOntoTrack(x, z) {
+  const angle = Math.atan2(z, x);
+  let t = (angle + Math.PI / 2) / (Math.PI * 2);
+  if (t < 0) t += 1;
+  return t;
+}
+
 export class Car {
   constructor(scene, isPlayer = true, color = 0x00ffff) {
     this.scene = scene;
@@ -11,12 +31,17 @@ export class Car {
     this.friction = 0.98;
     this.turnSpeed = 0.04;
     this.rotation = 0;
-    this.lap = 1;
+    this.lap = 0;
     this.finished = false;
     this.totalLaps = 3;
-    this.lastCheckpoint = 0;
-    // Start at -201 so first forward crossing of -200 (from -201 to -199) IS detected
-    // Using -201 not -200 because car starts AT -200 — prevZ==-200 && z==-200 would not trigger
+    this.nextCheckpoint = 1;
+    this.t = 0;
+    this.lastT = 0;
+    this.wrongWayStreak = 0;
+    this.offTrack = false;
+    this.offTrackStreak = 0;
+    this.speedMultiplier = 1.0;
+    this.strikes = 0;
     this.lastZ = -201;
     this.wasMovingForward = false;
 
@@ -142,49 +167,64 @@ export class Car {
     if (angle < 0) angle += Math.PI * 2;
     return angle;
   }
-  // Check if car crossed the finish line (at z = -200)
-  // For oval track, lap completion when car crosses from positive z (north) to z <= -200 (south)
-  // This is a FORWARD crossing only — prevents backwards exploit
-  checkLap() {
+  updateCheckpointAndProgress() {
+    const x = this.mesh.position.x;
     const z = this.mesh.position.z;
-    const prevZ = this.lastZ;
 
-    // Detect forward crossing: prevZ > -200 (above finish line) AND z <= -200 (at/below finish line)
-    // AND car must have been moving forward (positive z velocity before crossing)
-    if (prevZ > -200 && z <= -200 && !this.finished) {
-      this.lap++;
-      if (this.lap > this.totalLaps) {
-        this.finished = true;
+    const cp = CHECKPOINTS[this.nextCheckpoint];
+    const dx = x - cp.x;
+    const dz = z - cp.z;
+    if (dx * dx + dz * dz < cp.r * cp.r) {
+      if (this.nextCheckpoint === 0 && !this.finished) {
+        this.lap++;
+        if (this.lap >= this.totalLaps) {
+          this.finished = true;
+        }
       }
+      this.nextCheckpoint = (this.nextCheckpoint + 1) % CHECKPOINTS.length;
     }
 
-    // Track direction: positive velocity = moving forward (increasing z)
-    // wasMovingForward is true when car was moving in the positive z direction
+    const u = projectOntoTrack(x, z);
+    const dt_progress = wrapDelta(u - this.lastT);
+    if (dt_progress < -0.05) {
+      this.wrongWayStreak++;
+    } else {
+      this.wrongWayStreak = Math.max(0, this.wrongWayStreak - 1);
+    }
+    this.lastT = this.t;
+    this.t = u;
+
     const velocityZ = Math.cos(this.rotation) * this.velocity;
     this.wasMovingForward = velocityZ > 0;
     this.lastZ = z;
   }
 
-  // Get progress around track (0 to 1 representing one lap)
-  getProgress() {
-    const angle = this.getTrackAngle();
-    return angle / (Math.PI * 2);
+  checkLap() {
+    this.updateCheckpointAndProgress();
   }
 
-  // Get racing position comparison
+  getProgress() {
+    return this.t;
+  }
+
   getRacePosition() {
-    // Compare laps first, then track progress
-    const progress = (this.lap - 1) + this.getProgress();
-    return progress;
+    return this.lap + this.t;
   }
 
   reset() {
     this.velocity = 0;
     this.rotation = 0;
-    this.lap = 1;
+    this.lap = 0;
     this.finished = false;
-    this.lastCheckpoint = 0;
-    this.lastZ = -201; // Same as constructor — start position NOT on finish line
+    this.nextCheckpoint = 1;
+    this.t = 0;
+    this.lastT = 0;
+    this.wrongWayStreak = 0;
+    this.offTrack = false;
+    this.offTrackStreak = 0;
+    this.speedMultiplier = 1.0;
+    this.strikes = 0;
+    this.lastZ = -201;
     this.wasMovingForward = false;
     this.mesh.position.set(this.startX, 0, -200);
     this.mesh.rotation.y = 0;
