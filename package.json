@@ -10,12 +10,13 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "lint": "eslint src/ public/",
-    "test": "node --test 'tests/unit/**/*.test.js'"
+    "test": "node --test 'tests/unit/**/*.test.js' 'tests/integration/**/*.test.js'"
   },
   "dependencies": {
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "eslint": "^9.0.0"
+    "eslint": "^9.0.0",
+    "three": "^0.160.0"
   }
 }

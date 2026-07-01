@@ -169,11 +169,26 @@ export class Game {
 
     if (this.aiCar) {
       this.updateAI(dt);
-      this.aiCar.checkLap();
+      // Sprint 6 Fix A: drive the AI car's full per-frame pipeline so
+      // it benefits from off-track slowdown, trail, and checkpoint
+      // logic.  Previously the AI was moved manually here and the
+      // new update() / checkLap() pipeline was never invoked.
+      // The AI's throttle intent is supplied by updateAI() via velocity;
+      // we pass a synthetic forward=input into update() so the standard
+      // physics pipeline moves the mesh.
+      if (!this.aiCar.finished) {
+        this.aiCar.update({ forward: true, backward: false, left: false, right: false }, dt);
+        this.aiCar.checkLap();
+      }
 
       this.playerProgress = this.playerCar.getProgress();
       this.aiProgress = this.aiCar.getProgress();
     }
+
+    // === Sprint 6 Fix A: pairwise AABB collision sweep ===
+    // The collision logic lives in src/car.js but the game loop never
+    // called it.  Walk every pair of live cars and resolve any overlap.
+    this.runCollisionTick();
 
     if (this.sunMaterial) {
       this.sunMaterial.uniforms.uTime.value = now * 0.001;
@@ -188,6 +203,22 @@ export class Game {
     } else if (this.aiCar && this.aiCar.finished) {
       this.isRunning = false;
       this.onRaceEnd(false);
+    }
+  }
+
+  // Sprint 6 Fix A: pairwise collision sweep across all live cars.
+  // Extracted from animate() so it can be invoked from tests or other
+  // entrypoints without spinning up the full animate() loop.
+  runCollisionTick() {
+    const cars = [];
+    if (this.playerCar && !this.playerCar.finished) cars.push(this.playerCar);
+    if (this.aiCar && !this.aiCar.finished) cars.push(this.aiCar);
+    for (let i = 0; i < cars.length; i++) {
+      for (let j = i + 1; j < cars.length; j++) {
+        if (cars[i].checkCollision(cars[j])) {
+          cars[i].applyCollisionResponse(cars[j]);
+        }
+      }
     }
   }
 
@@ -226,10 +257,10 @@ export class Game {
 
     const s = dt * 60; // scale to 60fps baseline
     this.aiCar.rotation += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), 0.05 * s);
+    // Sprint 6 Fix A: only set the desired target speed here; the actual
+    // mesh position update is now performed by aiCar.update() in the
+    // animate() loop so both cars share the same physics pipeline.
     this.aiCar.velocity = 1.05; // Competitive: player maxSpeed is 1.2, AI should challenge but not dominate
-
-    this.aiCar.mesh.position.x += Math.sin(this.aiCar.rotation) * this.aiCar.velocity * s;
-    this.aiCar.mesh.position.z += Math.cos(this.aiCar.rotation) * this.aiCar.velocity * s;
     this.aiCar.mesh.rotation.y = this.aiCar.rotation;
   }
 

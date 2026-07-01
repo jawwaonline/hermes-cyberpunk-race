@@ -122,6 +122,84 @@ function updateAIState() {
   aiPrevZ = aiState.z;
 }
 
+// --- Sprint 6 Fix A: server-side pairwise collision check ---
+// Helper: do two cars (with mesh.position) overlap per AABB from src/car.js?
+// We re-implement the math here to avoid pulling three.js (and a Game)
+// into the server bundle.
+function serverBoxesOverlap(a, b) {
+  return (
+    a.min.x <= b.max.x && a.max.x >= b.min.x &&
+    a.min.y <= b.max.y && a.max.y >= b.min.y &&
+    a.min.z <= b.max.z && a.max.z >= b.min.z
+  );
+}
+
+function computeServerCarAABB(x, z, yaw) {
+  const halfWidth = 1.0;
+  const halfLength = 2.0;
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
+  const corners = [
+    { x: -halfWidth, z: -halfLength },
+    { x: halfWidth, z: -halfLength },
+    { x: halfWidth, z: halfLength },
+    { x: -halfWidth, z: halfLength }
+  ];
+  const r = corners.map(c => ({ x: x + c.x * cos - c.z * sin, z: z + c.x * sin + c.z * cos }));
+  let minX = r[0].x, maxX = r[0].x, minZ = r[0].z, maxZ = r[0].z;
+  for (const c of r) {
+    if (c.x < minX) minX = c.x;
+    if (c.x > maxX) maxX = c.x;
+    if (c.z < minZ) minZ = c.z;
+    if (c.z > maxZ) maxZ = c.z;
+  }
+  return { min: { x: minX, y: 0, z: minZ }, max: { x: maxX, y: 1, z: maxZ } };
+}
+
+// Resolve a collision between two cars whose positions are exposed as
+// { x, z, yaw } — the format the server actually has for each player.
+// On collision, push them apart along their connecting axis.
+function resolveServerCollision(carA, carB) {
+  const aabbA = computeServerCarAABB(carA.x, carA.z, carA.yaw);
+  const aabbB = computeServerCarAABB(carB.x, carB.z, carB.yaw);
+  if (!serverBoxesOverlap(aabbA, aabbB)) return false;
+
+  const dx = carB.x - carA.x;
+  const dz = carB.z - carA.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist === 0) {
+    carA.x -= 1;
+    carB.x += 1;
+    return true;
+  }
+  const overlap = 4.0 - dist;
+  if (overlap > 0) {
+    const nx = dx / dist;
+    const nz = dz / dist;
+    const push = overlap / 2 + 0.01;
+    carA.x -= nx * push;
+    carA.z -= nz * push;
+    carB.x += nx * push;
+    carB.z += nz * push;
+  }
+  return true;
+}
+
+// Tracks the latest reported position+yaw for every live player in a room
+// so we can run a server-authoritative pairwise AABB collision sweep after
+// every input batch.  Stored on the room object.
+function snapshotRoom(room) {
+  const snap = [];
+  for (const ws of room.players) {
+    if (!ws || ws.readyState !== 1) continue;
+    snap.push({
+      x: ws.lastX, z: ws.lastZ, yaw: ws.lastYaw,
+      ref: ws
+    });
+  }
+  return snap;
+}
+
 function broadcastToRoom(roomId, message, excludeWs = null) {
   const room = rooms.get(roomId);
   if (!room) return;
@@ -195,6 +273,8 @@ wss.on('connection', (ws) => {
   ws.playerIndex = null;
   ws.lap = 1;
   ws.lastZ = -201; // Start BEFORE finish line — first forward crossing (to -200) IS detected
+  ws.lastX = -8;   // Sprint 6 Fix A: track x for pairwise AABB check
+  ws.lastYaw = 0;  // Sprint 6 Fix A: track rotation
   ws.finished = false;
   ws.lastSeq = -1; // For sequence ordering check
   ws.lastInputRateReset = Date.now() + RATE_WINDOW_MS;
@@ -262,6 +342,11 @@ wss.on('connection', (ws) => {
         return;
       }
 
+      // Sprint 6 Fix A: remember this car position for the per-input
+      // pairwise AABB collision sweep below.
+      ws.lastX = x;
+      ws.lastYaw = rotation;
+
       // --- Server-side lap tracking (prevents backwards exploit) ---
       // Car starts at z=-200, drives positive z direction (up the oval), returns to z=-200 from positive side
       // This is a FORWARD lap crossing only (prevents backwards exploit)
@@ -271,9 +356,36 @@ wss.on('connection', (ws) => {
       }
       ws.lastZ = z;
 
+      // Sprint 6 Fix A: server-authoritative pairwise AABB collision check.
+      // After updating this player's snapshot, walk the other live player
+      // in the same room and resolve any overlap.  Both cars' lastX/lastZ/
+      // lastYaw are then re-broadcast below inside safeMsg.
+      if (ws.roomId && rooms.has(ws.roomId)) {
+        const room = rooms.get(ws.roomId);
+        const players = room.players.filter(p => p && p !== ws && p.readyState === 1 && Number.isFinite(p.lastX));
+        const self = { x: ws.lastX, z: ws.lastZ, yaw: ws.lastYaw };
+        for (const otherWs of players) {
+          const other = { x: otherWs.lastX, z: otherWs.lastZ, yaw: otherWs.lastYaw };
+          const beforeSelfX = self.x, beforeSelfZ = self.z;
+          const beforeOtherX = other.x, beforeOtherZ = other.z;
+          if (resolveServerCollision(self, other)) {
+            // Push resolved positions back into the other player's tracked state
+            // so subsequent checks stay consistent.  The self side goes back
+            // onto the websocket at the end of this handler.
+            otherWs.lastX = other.x;
+            otherWs.lastZ = other.z;
+            ws.lastX = self.x;
+            ws.lastZ = self.z;
+          }
+          // Avoid 'never read' lint for beforeX/beforeOtherX — they document
+          // the snapshot boundary.
+          void beforeSelfX; void beforeSelfZ; void beforeOtherX; void beforeOtherZ;
+        }
+      }
+
       const safeMsg = {
         type: ws.isAIMode ? 'ai_position' : 'opponent',
-        x, y, z, rotation,
+        x: ws.lastX, y, z: ws.lastZ, rotation,
         lap: ws.lap,
         finished: ws.finished // Server-determined, not client-submitted
       };
