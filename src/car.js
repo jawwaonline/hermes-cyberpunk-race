@@ -15,7 +15,10 @@ export class Car {
     this.finished = false;
     this.totalLaps = 3;
     this.lastCheckpoint = 0;
-    this.lastZ = -200; // Track starts at z = -200 (bottom of oval)
+    // Start at -201 so first forward crossing of -200 (from -201 to -199) IS detected
+    // Using -201 not -200 because car starts AT -200 — prevZ==-200 && z==-200 would not trigger
+    this.lastZ = -201;
+    this.wasMovingForward = false;
 
     const bodyMat = new THREE.MeshStandardMaterial({
       color: isPlayer ? 0x1a1a2e : 0x2e1a2e,
@@ -139,24 +142,26 @@ export class Car {
     if (angle < 0) angle += Math.PI * 2;
     return angle;
   }
-
   // Check if car crossed the finish line (at z = -200)
-  // For oval track, lap completion when car crosses from bottom-right back to bottom-left
+  // For oval track, lap completion when car crosses from positive z (north) to z <= -200 (south)
+  // This is a FORWARD crossing only — prevents backwards exploit
   checkLap() {
     const z = this.mesh.position.z;
     const prevZ = this.lastZ;
-    
-    // Detect crossing of finish line: car comes from positive z side (north)
-    // and crosses to negative z side (south) at the bottom of the oval
-    // The finish line is at z = -200 (bottom of oval)
-    if (prevZ > -200 && z <= -200) {
-      // Crossed from above to below finish line
+
+    // Detect forward crossing: prevZ > -200 (above finish line) AND z <= -200 (at/below finish line)
+    // AND car must have been moving forward (positive z velocity before crossing)
+    if (prevZ > -200 && z <= -200 && !this.finished) {
       this.lap++;
       if (this.lap > this.totalLaps) {
         this.finished = true;
       }
     }
-    
+
+    // Track direction: positive velocity = moving forward (increasing z)
+    // wasMovingForward is true when car was moving in the positive z direction
+    const velocityZ = Math.cos(this.rotation) * this.velocity;
+    this.wasMovingForward = velocityZ > 0;
     this.lastZ = z;
   }
 
@@ -179,7 +184,8 @@ export class Car {
     this.lap = 1;
     this.finished = false;
     this.lastCheckpoint = 0;
-    this.lastZ = -200;
+    this.lastZ = -201; // Same as constructor — start position NOT on finish line
+    this.wasMovingForward = false;
     this.mesh.position.set(this.startX, 0, -200);
     this.mesh.rotation.y = 0;
   }

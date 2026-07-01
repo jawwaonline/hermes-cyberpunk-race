@@ -165,6 +165,9 @@ wss.on('connection', (ws) => {
   ws.isAlive = true;
   ws.roomId = null;
   ws.playerIndex = null;
+  ws.lap = 1;
+  ws.lastZ = -200; // Start at finish line — forward crossing from here starts lap 1
+  ws.finished = false;
   msgRateLimit.set(ws, { count: 0, resetAt: Date.now() + RATE_WINDOW_MS });
 
   ws.on('pong', () => { ws.isAlive = true; });
@@ -222,14 +225,27 @@ wss.on('connection', (ws) => {
       const y = validateNumber(msg.y, -10, 50);
       const z = validateNumber(msg.z, -500, 500);
       const rotation = validateNumber(msg.rotation, -Math.PI * 2, Math.PI * 2);
-      const lap = validateNumber(msg.lap, 0, 10);
 
-      if (x === null || y === null || z === null || rotation === null || lap === null) {
+      if (x === null || y === null || z === null || rotation === null) {
         ws.send(JSON.stringify({ type: 'error', msg: 'Invalid position data' }));
         return;
       }
 
-      const safeMsg = { type: 'opponent', x, y, z, rotation, lap, finished: msg.finished };
+      // --- Server-side lap tracking (prevents backwards exploit) ---
+      // Car starts at z=-200, drives positive z direction (up the oval), returns to z=-200 from positive side
+      // This is a FORWARD lap crossing only (prevents backwards exploit)
+      if (ws.lastZ > -200 && z <= -200 && !ws.finished) {
+        ws.lap++;
+        if (ws.lap > 3) ws.finished = true;
+      }
+      ws.lastZ = z;
+
+      const safeMsg = {
+        type: ws.isAIMode ? 'ai_position' : 'opponent',
+        x, y, z, rotation,
+        lap: ws.lap,
+        finished: ws.finished // Server-determined, not client-submitted
+      };
 
       if (ws.isAIMode) {
         aiModeClients.forEach(client => {
