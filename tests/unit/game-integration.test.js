@@ -95,14 +95,21 @@ describe('Fix A — integration: 2 cars same position are pushed apart', () => {
     assert.ok(Number.isFinite(aiCar.mesh.position.z));
   });
 
-  it('Car.update() advances nextCheckpoint when crossing the next target', () => {
+  it('Car.update() advances nextCheckpoint when crossing the next target', async () => {
+    // Sprint 9: track is now a Catmull-Rom spline with banking. Checkpoints
+    // are auto-generated from waypoints (track.js:345). We use CHECKPOINTS[1]
+    // so this test stays valid when the spline geometry changes.
+    const track = await import('../../src/track.js');
+    const cp = track.CHECKPOINTS[1];
     const scene = new FakeScene();
     const playerCar = new Car(scene, true, 0x00ffff);
-    playerCar.mesh.position.set(30, 0, 0); // On top of checkpoint 1
-    // Rotate the car so its forward direction aligns with the +angle
-    // tangent at this point on the oval. Checkpoint 1 sits at (30,0) on
-    // the +X end of the oval — the +angle tangent there points in +Z.
-    // car.js uses rotation=0 means "forward = +Z", so rotation 0 is correct.
+    playerCar.mesh.position.set(cp.x, cp.y || 0, cp.z); // On top of checkpoint 1
+    // car.js uses rotation=0 means "forward = +Z"; align car forward with the
+    // local track tangent so the dot-product gate fires.
+    const waypointIdx = playerCar.getWaypointIndex();
+    const wp = track.WAYPOINTS[waypointIdx];
+    const nextWp = track.WAYPOINTS[(waypointIdx + 1) % track.WAYPOINTS.length];
+    playerCar.rotation = Math.atan2(nextWp.x - wp.x, nextWp.z - wp.z);
     const before = playerCar.nextCheckpoint;
 
     playerCar.update({ forward: true }, 1 / 60);

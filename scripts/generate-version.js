@@ -4,13 +4,15 @@
 // reports its real commit hash (instead of whatever was checked in).
 //
 // Strategy:
-//   1. Try `git rev-parse --short HEAD` (works in local dev/CI with full clone)
-//   2. Fall back to GIT_COMMIT_HASH env var (set by Coolify build-time env)
-//   3. Fall back to "unknown"
+//   1. Try GIT_COMMIT_HASH env var (set by some CI systems)
+//   2. Try COOLIFY_COMMIT_SHA env var (set by Coolify 4.x — actually NOT injected by default,
+//      but we read it for future-proofing; if not set, we fall back to local git)
+//   3. Try `git rev-parse --short HEAD` (works in local dev/CI with full clone)
+//   4. Fall back to "unknown"
 import { execSync } from 'node:child_process';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
-let hash = process.env.GIT_COMMIT_HASH;
+let hash = process.env.GIT_COMMIT_HASH || process.env.COOLIFY_COMMIT_SHA;
 
 if (!hash) {
   try {

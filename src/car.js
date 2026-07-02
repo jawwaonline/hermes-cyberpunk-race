@@ -1,15 +1,13 @@
 import * as THREE from 'three';
-import { TRACK_WIDTH, TRACK_LENGTH, WAYPOINTS } from './shared-track.js';
+import { TRACK_WIDTH, WAYPOINTS, BOOST_PADS } from './shared-track.js';
+import { getClosestWaypointIndex, isOnTrack } from './track.js';
 
-const CHECKPOINTS = [
-  { id: 0, x: 0, z: -200, r: 15 },
-  { id: 1, x: 30, z: 0, r: 15 },
-  { id: 2, x: 0, z: 200, r: 15 },
-  { id: 3, x: -30, z: 0, r: 15 }
-];
-
-const A = 30;
-const B = 200;
+const CHECKPOINTS = [];
+for (let i = 0; i < 4; i++) {
+  const idx = Math.floor((i / 4) * WAYPOINTS.length);
+  const wp = WAYPOINTS[idx];
+  CHECKPOINTS.push({ id: i, x: wp.x, z: wp.z, y: wp.y, r: 15 });
+}
 
 function wrapDelta(d) {
   if (d > 0.5) return d - 1;
@@ -17,64 +15,10 @@ function wrapDelta(d) {
   return d;
 }
 
-function projectOntoTrack(x, z) {
-  const angle = Math.atan2(z, x);
-  let t = (angle + Math.PI / 2) / (Math.PI * 2);
-  if (t < 0) t += 1;
-  return t;
-}
-
-const trackPolygon = (function() {
-  const inner = [];
-  const outer = [];
-  const N = 64;
-  const halfW = TRACK_WIDTH / 2;
-
-  for (let i = 0; i < N; i++) {
-    const angle = (i / N) * Math.PI * 2 - Math.PI / 2;
-    const cx = A * Math.cos(angle);
-    const cz = B * Math.sin(angle);
-
-    const nx = cx / (A * A);
-    const nz = cz / (B * B);
-    const nLen = Math.sqrt(nx * nx + nz * nz);
-
-    inner.push({ x: cx - nx / nLen * halfW, z: cz - nz / nLen * halfW });
-    outer.push({ x: cx + nx / nLen * halfW, z: cz + nz / nLen * halfW });
-  }
-
-  return { inner, outer };
-})();
-
-function pointInPolygon(x, z, polygon) {
-  let inside = false;
-  const n = polygon.length;
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    const xi = polygon[i].x, zi = polygon[i].z;
-    const xj = polygon[j].x, zj = polygon[j].z;
-    if (((zi > z) !== (zj > z)) && (x < (xj - xi) * (z - zi) / (zj - zi) + xi)) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
-
-function isOnTrack(x, z) {
-  const inOuter = pointInPolygon(x, z, trackPolygon.outer);
-  const inInner = pointInPolygon(x, z, trackPolygon.inner);
-  return inOuter && !inInner;
-}
-
 function nearestValidSplinePoint(x, z) {
-  const angle = Math.atan2(z, x);
-  const cx = A * Math.cos(angle);
-  const cz = B * Math.sin(angle);
-  const nx = cx / (A * A);
-  const nz = cz / (B * B);
-  const nLen = Math.sqrt(nx * nx + nz * nz);
-  const halfW = TRACK_WIDTH / 2 - 1;
-
-  return { x: cx + nx / nLen * halfW, y: 0, z: cz + nz / nLen * halfW };
+  const idx = getClosestWaypointIndex(x, z);
+  const wp = WAYPOINTS[idx];
+  return { x: wp.x, y: wp.y, z: wp.z };
 }
 
 function computeCarAABB(x, z, yaw) {
@@ -145,6 +89,38 @@ function applyCollisionResponse(carA, carB) {
   }
 }
 
+const fresnelVertShader = `
+  varying vec3 vNormal;
+  varying vec3 vViewDir;
+  varying vec3 vWorldPos;
+  void main() {
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPos = worldPos.xyz;
+    vNormal = normalize(normalMatrix * normal);
+    vViewDir = normalize(cameraPosition - worldPos.xyz);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const fresnelFragShader = `
+  varying vec3 vNormal;
+  varying vec3 vViewDir;
+  varying vec3 vWorldPos;
+  uniform vec3 uColor;
+  uniform vec3 uEmissive;
+  uniform float uTime;
+  uniform float uSpeed;
+  void main() {
+    float fresnel = pow(1.0 - max(dot(vNormal, vViewDir), 0.0), 3.0);
+    vec3 baseColor = uColor;
+    float pulse = sin(uTime * 3.0 + uSpeed * 10.0) * 0.5 + 0.5;
+    float wirePulse = 0.5 + 0.5 * pulse;
+    vec3 rimColor = uEmissive * fresnel * wirePulse * 2.0;
+    vec3 finalColor = baseColor + rimColor;
+    gl_FragColor = vec4(finalColor, 1.0);
+  }
+`;
+
 export class Car {
   constructor(scene, isPlayer = true, color = 0x00ffff) {
     this.scene = scene;
@@ -168,91 +144,195 @@ export class Car {
     this.strikes = 0;
     this.lastZ = -201;
     this.wasMovingForward = false;
+    this.boostPadActive = false;
+    this.boostPadTimer = 0;
+    this.thrusterParticles = [];
+    this.currentRoll = 0;
+    this.currentPitch = 0;
 
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: 0x1A1A2E,
-      emissive: 0xFF006E,
-      emissiveIntensity: 0.35,
-      roughness: 0.25,
-      metalness: 0.85
-    });
-
-    const accentMat = new THREE.MeshStandardMaterial({
-      color: color,
-      emissive: color,
-      emissiveIntensity: 1.2,
-      roughness: 0.2,
-      metalness: 0.9
-    });
+    const carColor = new THREE.Color(color);
 
     this.mesh = new THREE.Group();
 
-    const bodyGeo = new THREE.BoxGeometry(2, 0.6, 4);
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 0.5;
+    const fresnelMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(0x1A1A2E) },
+        uEmissive: { value: carColor },
+        uTime: { value: 0 },
+        uSpeed: { value: 0 }
+      },
+      vertexShader: fresnelVertShader,
+      fragmentShader: fresnelFragShader
+    });
+    this.fresnelMat = fresnelMat;
+
+    const bodyGeo = new THREE.BufferGeometry();
+    const bodyVerts = [];
+    bodyVerts.push(-1, 0, -2,  1, 0, -2,  1, 0.6, -2);
+    bodyVerts.push(-1, 0, -2,  1, 0.6, -2,  -1, 0.6, -2);
+    bodyVerts.push(-1, 0, 2,  1, 0, 2,  1, 0.6, 2);
+    bodyVerts.push(-1, 0, 2,  1, 0.6, 2,  -1, 0.6, 2);
+    bodyVerts.push(-1, 0, -2,  -1, 0, 2,  -1, 0.6, 2);
+    bodyVerts.push(-1, 0, -2,  -1, 0.6, 2,  -1, 0.6, -2);
+    bodyVerts.push(1, 0, -2,  1, 0, 2,  1, 0.6, 2);
+    bodyVerts.push(1, 0, -2,  1, 0.6, 2,  1, 0.6, -2);
+    bodyVerts.push(-1, 0.6, -2,  1, 0.6, -2,  1, 0.6, 2);
+    bodyVerts.push(-1, 0.6, -2,  1, 0.6, 2,  -1, 0.6, 2);
+    bodyVerts.push(-1, 0, -2,  1, 0, -2,  1, 0, 2);
+    bodyVerts.push(-1, 0, -2,  1, 0, 2,  -1, 0, 2);
+    bodyGeo.setAttribute('position', new THREE.Float32BufferAttribute(bodyVerts, 3));
+    bodyGeo.computeVertexNormals();
+    const body = new THREE.Mesh(bodyGeo, fresnelMat);
+    body.position.y = 0.4;
     this.mesh.add(body);
 
-    const cabinGeo = new THREE.BoxGeometry(1.6, 0.5, 2);
-    const cabin = new THREE.Mesh(cabinGeo, bodyMat);
-    cabin.position.set(0, 1, -0.3);
-    this.mesh.add(cabin);
+    const accentMat = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.9,
+      toneMapped: false
+    });
 
-    const accentGeo = new THREE.BoxGeometry(2.2, 0.1, 4.2);
+    const accentGeo = new THREE.BoxGeometry(2.1, 0.05, 4.1);
     const accent = new THREE.Mesh(accentGeo, accentMat);
-    accent.position.y = 0.3;
+    accent.position.y = 0.2;
     this.mesh.add(accent);
 
-    const frontGeo = new THREE.BoxGeometry(1.8, 0.3, 0.3);
+    const wireGeo = new THREE.EdgesGeometry(bodyGeo);
+    const wireMat = new THREE.LineBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.6
+    });
+    const wireframe = new THREE.LineSegments(wireGeo, wireMat);
+    wireframe.position.y = 0.4;
+    this.mesh.add(wireframe);
+    this.wireframe = wireframe;
+
+    const cabinGeo = new THREE.BufferGeometry();
+    const cabinVerts = [];
+    cabinVerts.push(-0.7, 0, -0.8,  0.7, 0, -0.8,  0.7, 0.5, -0.8);
+    cabinVerts.push(-0.7, 0, -0.8,  0.7, 0.5, -0.8,  -0.7, 0.5, -0.8);
+    cabinVerts.push(-0.7, 0, 0.8,  0.7, 0, 0.8,  0.7, 0.5, 0.8);
+    cabinVerts.push(-0.7, 0, 0.8,  0.7, 0.5, 0.8,  -0.7, 0.5, 0.8);
+    cabinVerts.push(-0.7, 0, -0.8,  -0.7, 0, 0.8,  -0.7, 0.5, 0.8);
+    cabinVerts.push(-0.7, 0, -0.8,  -0.7, 0.5, 0.8,  -0.7, 0.5, -0.8);
+    cabinVerts.push(0.7, 0, -0.8,  0.7, 0, 0.8,  0.7, 0.5, 0.8);
+    cabinVerts.push(0.7, 0, -0.8,  0.7, 0.5, 0.8,  0.7, 0.5, -0.8);
+    cabinGeo.setAttribute('position', new THREE.Float32BufferAttribute(cabinVerts, 3));
+    cabinGeo.computeVertexNormals();
+    const cabin = new THREE.Mesh(cabinGeo, fresnelMat.clone());
+    cabin.position.set(0, 0.85, -0.2);
+    this.mesh.add(cabin);
+
+    const frontGeo = new THREE.BoxGeometry(1.8, 0.2, 0.3);
     const front = new THREE.Mesh(frontGeo, accentMat);
-    front.position.set(0, 0.5, 2);
+    front.position.set(0, 0.4, 1.9);
     this.mesh.add(front);
 
-    const wireframeMat = new THREE.MeshBasicMaterial({
-      color: color,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.9
-    });
-    const bodyWire = new THREE.Mesh(bodyGeo.clone(), wireframeMat);
-    bodyWire.position.y = 0.5;
-    this.mesh.add(bodyWire);
-    const cabinWire = new THREE.Mesh(cabinGeo.clone(), wireframeMat);
-    cabinWire.position.set(0, 1, -0.3);
-    this.mesh.add(cabinWire);
-
-    const lightGeo = new THREE.BoxGeometry(0.4, 0.2, 0.1);
-    const lightMat = new THREE.MeshStandardMaterial({
+    const lightGeo = new THREE.BoxGeometry(0.3, 0.15, 0.1);
+    const lightMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
-      emissive: 0xffffff,
-      emissiveIntensity: 2
+      toneMapped: false
     });
     const leftLight = new THREE.Mesh(lightGeo, lightMat);
-    leftLight.position.set(-0.6, 0.5, 2.1);
+    leftLight.position.set(-0.6, 0.4, 2.05);
     this.mesh.add(leftLight);
 
     const rightLight = new THREE.Mesh(lightGeo, lightMat);
-    rightLight.position.set(0.6, 0.5, 2.1);
+    rightLight.position.set(0.6, 0.4, 2.05);
     this.mesh.add(rightLight);
 
+    const thrusterGeo = new THREE.CylinderGeometry(0.15, 0.25, 0.6, 8);
+    const thrusterMat = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.8,
+      toneMapped: false
+    });
+    const leftThruster = new THREE.Mesh(thrusterGeo, thrusterMat);
+    leftThruster.position.set(-0.6, 0.4, -2.1);
+    leftThruster.rotation.x = Math.PI / 2;
+    this.mesh.add(leftThruster);
+    this.leftThruster = leftThruster;
+
+    const rightThruster = new THREE.Mesh(thrusterGeo, thrusterMat.clone());
+    rightThruster.position.set(0.6, 0.4, -2.1);
+    rightThruster.rotation.x = Math.PI / 2;
+    this.mesh.add(rightThruster);
+    this.rightThruster = rightThruster;
+
+    const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 16);
+    const wheelMat = new THREE.MeshStandardMaterial({
+      color: 0x111111,
+      roughness: 0.8,
+      metalness: 0.3
+    });
+    const wheelPositions = [
+      { x: -1.1, y: 0.1, z: 1.2 },
+      { x: 1.1, y: 0.1, z: 1.2 },
+      { x: -1.1, y: 0.1, z: -1.2 },
+      { x: 1.1, y: 0.1, z: -1.2 }
+    ];
+    this.wheels = [];
+    for (const pos of wheelPositions) {
+      const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+      wheel.position.set(pos.x, pos.y, pos.z);
+      wheel.rotation.z = Math.PI / 2;
+      this.mesh.add(wheel);
+      this.wheels.push(wheel);
+    }
+
     this.trailPositions = [];
-    this.trailMesh = null;
     this.trailMat = new THREE.MeshBasicMaterial({
       color: color,
       transparent: true,
-      opacity: 0.85
+      opacity: 0.7,
+      toneMapped: false
     });
 
-    const startX = isPlayer ? -8 : 8;
-    this.mesh.position.set(startX, 0, -200);
+    const startIdx = getClosestWaypointIndex(0, -180);
+    const startWp = WAYPOINTS[startIdx];
+    const nextWp = WAYPOINTS[(startIdx + 1) % WAYPOINTS.length];
+    const startAngle = Math.atan2(nextWp.x - startWp.x, nextWp.z - startWp.z);
+
+    const startX = isPlayer ? startWp.x - 3 : startWp.x + 3;
+    this.mesh.position.set(startX, startWp.y, startWp.z);
     this.startX = startX;
+    this.startAngle = startAngle;
+    this.rotation = startAngle;
 
     scene.add(this.mesh);
+  }
+
+  checkBoostPads() {
+    const pos = this.mesh.position;
+    for (const pad of BOOST_PADS) {
+      const dx = pos.x - pad.x;
+      const dz = pos.z - pad.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < 5 && pos.y >= pad.y - 1 && pos.y <= pad.y + 2) {
+        this.boostPadTimer = 60;
+        this.boostPadActive = true;
+        this.speedMultiplier = pad.strength;
+      }
+    }
   }
 
   update(input, dt = 1 / 60) {
     const s = dt * 60;
 
     if (this.finished) return;
+
+    if (this.boostPadTimer > 0) {
+      this.boostPadTimer--;
+      if (this.boostPadTimer === 0) {
+        this.boostPadActive = false;
+        this.speedMultiplier = 1.0;
+      }
+    }
+
+    this.checkBoostPads();
 
     const speed = Math.abs(this.velocity) * 300;
 
@@ -268,17 +348,56 @@ export class Car {
       this.velocity *= this.friction;
     }
 
-    this.velocity = Math.max(-this.maxSpeed * 0.3, Math.min(this.maxSpeed, this.velocity));
+    this.velocity = Math.max(-this.maxSpeed * 0.3, Math.min(this.maxSpeed * this.speedMultiplier, this.velocity));
+
+    const targetRoll = 0;
+    const targetPitch = 0;
 
     if (Math.abs(this.velocity) > 0.01) {
       const dir = this.velocity > 0 ? 1 : -1;
-      if (input.left) this.rotation += this.turnSpeed * s * dir;
-      if (input.right) this.rotation -= this.turnSpeed * s * dir;
+      if (input.left) {
+        this.rotation += this.turnSpeed * s * dir;
+        this.currentRoll = THREE.MathUtils.lerp(this.currentRoll, -0.1 * dir, 0.1);
+      } else if (input.right) {
+        this.rotation -= this.turnSpeed * s * dir;
+        this.currentRoll = THREE.MathUtils.lerp(this.currentRoll, 0.1 * dir, 0.1);
+      } else {
+        this.currentRoll = THREE.MathUtils.lerp(this.currentRoll, 0, 0.1);
+      }
+      if (input.forward) {
+        this.currentPitch = THREE.MathUtils.lerp(this.currentPitch, -0.05, 0.1);
+      } else if (input.backward) {
+        this.currentPitch = THREE.MathUtils.lerp(this.currentPitch, 0.05, 0.1);
+      } else {
+        this.currentPitch = THREE.MathUtils.lerp(this.currentPitch, 0, 0.1);
+      }
+    } else {
+      this.currentRoll = THREE.MathUtils.lerp(this.currentRoll, 0, 0.1);
+      this.currentPitch = THREE.MathUtils.lerp(this.currentPitch, 0, 0.1);
     }
 
     this.mesh.position.x += Math.sin(this.rotation) * this.velocity * s;
     this.mesh.position.z += Math.cos(this.rotation) * this.velocity * s;
     this.mesh.rotation.y = this.rotation;
+    this.mesh.rotation.z = this.currentRoll;
+    this.mesh.rotation.x = this.currentPitch;
+
+    const wheelRot = this.velocity * s * 2;
+    for (const wheel of this.wheels) {
+      wheel.rotation.x += wheelRot;
+    }
+
+    const thrusterIntensity = input.forward ? 1.0 : 0.3;
+    const thrusterScale = 0.8 + thrusterIntensity * 0.4;
+    this.leftThruster.scale.set(1, thrusterScale, 1);
+    this.rightThruster.scale.set(1, thrusterScale, 1);
+    this.leftThruster.material.opacity = 0.5 + thrusterIntensity * 0.5;
+    this.rightThruster.material.opacity = 0.5 + thrusterIntensity * 0.5;
+
+    if (this.fresnelMat) {
+      this.fresnelMat.uniforms.uTime.value = performance.now() * 0.001;
+      this.fresnelMat.uniforms.uSpeed.value = speed / 300;
+    }
 
     this.updateTrail();
     this.updateOffTrack();
@@ -312,20 +431,15 @@ export class Car {
       this.speedMultiplier = 0.25;
       this.offTrackStreak++;
 
-      // Sprint 6 Fix C: actively push the car back toward the nearest
-      // valid track point while it is off-track.  The previous behaviour
-      // only snapped the car after it had been STUCK for 90 ticks
-      // (~1.5 s), which let a fast car drive far outside the track.
-      // The push is small per frame so it still feels like a wall.
       const safe = nearestValidSplinePoint(x, z);
       const dx = safe.x - x;
       const dz = safe.z - z;
       const dist = Math.hypot(dx, dz);
       if (dist > 0.01) {
-        // Move 15% of the way back each frame; cap at 0.6 units.
         const step = Math.min(0.6, dist * 0.15);
         this.mesh.position.x += (dx / dist) * step;
         this.mesh.position.z += (dz / dist) * step;
+        this.mesh.position.y = THREE.MathUtils.lerp(this.mesh.position.y, safe.y, 0.1);
       }
 
       if (Math.abs(this.velocity) * 300 < 1 && this.offTrackStreak > 90) {
@@ -334,7 +448,9 @@ export class Car {
         this.offTrackStreak = 0;
       }
     } else {
-      this.speedMultiplier = 1.0;
+      if (this.speedMultiplier < 1.0 && !this.boostPadActive) {
+        this.speedMultiplier = 1.0;
+      }
       if (this.offTrackStreak > 60) {
         this.strikes++;
       }
@@ -361,43 +477,38 @@ export class Car {
     return Math.abs(this.velocity) * 300;
   }
 
-  // Get current angle on the elliptical track (0 to 2*PI)
-  getTrackAngle() {
-    const x = this.mesh.position.x;
-    const z = this.mesh.position.z;
-    const A = 30; // x-axis radius
-    const B = 200; // z-axis radius
-    
-    // Calculate angle from ellipse center
-    let angle = Math.atan2(z / B, x / A);
-    if (angle < 0) angle += Math.PI * 2;
-    return angle;
+  getWaypointIndex() {
+    return getClosestWaypointIndex(this.mesh.position.x, this.mesh.position.z);
   }
+
+  getTrackAngle() {
+    return this.getWaypointIndex() / WAYPOINTS.length * Math.PI * 2;
+  }
+
   updateCheckpointAndProgress() {
     const x = this.mesh.position.x;
     const z = this.mesh.position.z;
+    const wpIdx = this.getWaypointIndex();
+    const wp = WAYPOINTS[wpIdx];
 
     const cp = CHECKPOINTS[this.nextCheckpoint];
     const dx = x - cp.x;
     const dz = z - cp.z;
     if (dx * dx + dz * dz < cp.r * cp.r) {
-      // Direction validation: only count as a real pass if the car is
-      // moving in the *correct* direction around the oval.
-      // The correct direction at any checkpoint is tangent to the
-      // ellipse in the +angle direction (counter-clockwise on the x-z
-      // plane when looking from +y). Compute the tangent vector at
-      // the car's current angle and check the dot product with the
-      // car's velocity. If < 0, the car is going the wrong way.
-      const carAngle = this.getTrackAngle();
-      const tangentX = -Math.sin(carAngle) * A;
-      const tangentZ =  Math.cos(carAngle) * B;
-      const tlen = Math.hypot(tangentX, tangentZ);
-      const tx = tangentX / tlen;
-      const tz = tangentZ / tlen;
-      const vx = Math.sin(this.rotation) * this.velocity;
-      const vz = Math.cos(this.rotation) * this.velocity;
+      const tangent = (idx) => {
+        const next = (idx + 1) % WAYPOINTS.length;
+        return Math.atan2(
+          WAYPOINTS[next].x - WAYPOINTS[idx].x,
+          WAYPOINTS[next].z - WAYPOINTS[idx].z
+        );
+      };
+      const tangentAngle = tangent(wpIdx);
+      const vx = Math.sin(this.rotation);
+      const vz = Math.cos(this.rotation);
+      const tx = Math.sin(tangentAngle);
+      const tz = Math.cos(tangentAngle);
       const dot = vx * tx + vz * tz;
-      if (dot > 0) {  // moving in the correct direction (any non-zero positive component)
+      if (dot > 0) {
         if (this.nextCheckpoint === 0 && !this.finished) {
           this.lap++;
           if (this.lap >= this.totalLaps) {
@@ -406,25 +517,16 @@ export class Car {
         }
         this.nextCheckpoint = (this.nextCheckpoint + 1) % CHECKPOINTS.length;
       }
-      // If dot <= 0, the car is going backwards through the checkpoint;
-      // we ignore this and let it pass through visually but don't
-      // advance. After 60 frames of wrong-way the existing
-      // wrongWayStreak counter handles the HUD warning.
     }
 
-    const u = projectOntoTrack(x, z);
-    const dt_progress = wrapDelta(u - this.lastT);
+    this.t = wpIdx / WAYPOINTS.length;
+    const dt_progress = wrapDelta(this.t - this.lastT);
     if (dt_progress < -0.05) {
       this.wrongWayStreak++;
     } else {
       this.wrongWayStreak = Math.max(0, this.wrongWayStreak - 1);
     }
     this.lastT = this.t;
-    this.t = u;
-
-    const velocityZ = Math.cos(this.rotation) * this.velocity;
-    this.wasMovingForward = velocityZ > 0;
-    this.lastZ = z;
   }
 
   checkLap() {
@@ -440,7 +542,7 @@ export class Car {
   }
 
   getProgress() {
-    return this.t;
+    return this.lap + this.t;
   }
 
   getRacePosition() {
@@ -449,7 +551,6 @@ export class Car {
 
   reset() {
     this.velocity = 0;
-    this.rotation = 0;
     this.lap = 0;
     this.finished = false;
     this.nextCheckpoint = 1;
@@ -460,10 +561,16 @@ export class Car {
     this.offTrackStreak = 0;
     this.speedMultiplier = 1.0;
     this.strikes = 0;
-    this.lastZ = -201;
-    this.wasMovingForward = false;
-    this.mesh.position.set(this.startX, 0, -200);
-    this.mesh.rotation.y = 0;
+    this.boostPadActive = false;
+    this.boostPadTimer = 0;
+    this.currentRoll = 0;
+    this.currentPitch = 0;
+
+    const startIdx = getClosestWaypointIndex(0, -180);
+    const startWp = WAYPOINTS[startIdx];
+    this.mesh.position.set(this.startX, startWp.y, startWp.z);
+    this.rotation = this.startAngle;
+    this.mesh.rotation.set(0, this.startAngle, 0);
     this.trailPositions = [];
     if (this.trailMesh) {
       this.mesh.remove(this.trailMesh);

@@ -1,206 +1,287 @@
 import * as THREE from 'three';
-import { TRACK_WIDTH, TRACK_LENGTH, WAYPOINTS } from './shared-track.js';
+import { TRACK_WIDTH, WAYPOINTS, BOOST_PADS } from './shared-track.js';
 
-export { TRACK_WIDTH, TRACK_LENGTH, WAYPOINTS };
+const CHECKPOINTS = [];
+
+for (let i = 0; i < 4; i++) {
+  const idx = Math.floor((i / 4) * WAYPOINTS.length);
+  const wp = WAYPOINTS[idx];
+  CHECKPOINTS.push({ id: i, x: wp.x, z: wp.z, y: wp.y, r: 15 });
+}
+
+export { TRACK_WIDTH, WAYPOINTS, BOOST_PADS, CHECKPOINTS };
 
 export const BARRIER_HEIGHT = 2;
 
 const CYAN = 0x00F5FF;
 const MAGENTA = 0xFF006E;
 const PURPLE = 0x9D4EDD;
-const YELLOW = 0xFFFF00;
-const TRACK_COLOR = 0x0A0E27;
 const DEEP_BLUE = 0x0A0E27;
+const TRACK_COLOR = 0x0A0E27;
+
+function computeTrackTangent(waypoints, i) {
+  const next = (i + 1) % waypoints.length;
+  const dx = waypoints[next].x - waypoints[i].x;
+  const dz = waypoints[next].z - waypoints[i].z;
+  const dy = waypoints[next].y - waypoints[i].y;
+  const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  return { x: dx / len, y: dy / len, z: dz / len };
+}
+
+function computeTrackNormal(i, waypoints) {
+  const t = computeTrackTangent(waypoints, i);
+  const horizontal = Math.sqrt(t.x * t.x + t.z * t.z);
+  const bankAngle = Math.atan2(t.y, horizontal);
+  const bankedNormal = {
+    x: -t.z * Math.cos(bankAngle * 0.3),
+    y: Math.sin(bankAngle * 0.3) + 0.5,
+    z: t.x * Math.cos(bankAngle * 0.3)
+  };
+  const len = Math.sqrt(bankedNormal.x ** 2 + bankedNormal.y ** 2 + bankedNormal.z ** 2);
+  return { x: bankedNormal.x / len, y: bankedNormal.y / len, z: bankedNormal.z / len };
+}
 
 export function createTrack(scene) {
   const trackGroup = new THREE.Group();
   trackGroup.name = 'track';
 
-  // === GROUND PLANE ===
-  const groundGeo = new THREE.PlaneGeometry(600, 600);
+  const groundGeo = new THREE.PlaneGeometry(800, 800);
   const groundMat = new THREE.MeshStandardMaterial({
-    color: DEEP_BLUE,
-    roughness: 0.9,
-    metalness: 0.1
+    color: 0x050510,
+    roughness: 0.95,
+    metalness: 0.05
   });
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.1;
+  ground.position.y = -0.2;
   trackGroup.add(ground);
 
-  // === TRACK SURFACE (ELLIPTICAL OVAL) ===
-  const aOuter = 30 + TRACK_WIDTH / 2; // x outer radius
-  const bOuter = 200 + TRACK_WIDTH / 2; // z outer radius
-  const aInner = 30 - TRACK_WIDTH / 2; // x inner radius
-  const bInner = 200 - TRACK_WIDTH / 2; // z inner radius
-
-  // Create track surface as a custom geometry (donut/ring shape)
-  const trackGeo = new THREE.BufferGeometry();
+  const numSegments = 200;
+  const halfW = TRACK_WIDTH / 2;
   const vertices = [];
   const indices = [];
-  
-  const segments = 64;
-  for (let i = 0; i <= segments; i++) {
-    const t = (i / segments) * Math.PI * 2;
-    const cosT = Math.cos(t);
-    const sinT = Math.sin(t);
-    
-    // Outer edge
-    vertices.push(aOuter * cosT, 0, bOuter * sinT);
-    // Inner edge
-    vertices.push(aInner * cosT, 0, bInner * sinT);
+  const uvs = [];
+  const colors = [];
+
+  const gridVertShader = `
+    varying vec2 vUv;
+    varying vec3 vWorldPos;
+    void main() {
+      vUv = uv;
+      vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `;
+
+  const gridFragShader = `
+    varying vec2 vUv;
+    varying vec3 vWorldPos;
+    uniform float uTime;
+    uniform vec3 uPlayerPos;
+    void main() {
+      vec2 worldUV = vWorldPos.xz * 0.05;
+      float scroll = uTime * 0.5;
+      vec2 scrolledUV = worldUV + vec2(0.0, scroll);
+      float lineX = abs(fract(scrolledUV.x * 2.0) - 0.5) * 2.0;
+      float lineZ = abs(fract(scrolledUV.y * 2.0) - 0.5) * 2.0;
+      float grid = 1.0 - smoothstep(0.85, 1.0, max(lineX, lineZ));
+      vec3 baseColor = vec3(0.04, 0.05, 0.15);
+      vec3 lineColor = vec3(0.0, 0.96, 1.0) * 0.3;
+      vec3 finalColor = mix(baseColor, lineColor, grid * 0.5);
+      float distToPlayer = length(vWorldPos.xz - uPlayerPos.xz);
+      float fadeStart = 50.0;
+      float fadeEnd = 150.0;
+      float fade = 1.0 - smoothstep(fadeStart, fadeEnd, distToPlayer);
+      gl_FragColor = vec4(finalColor, fade * 0.8 + 0.2);
+    }
+  `;
+
+  for (let i = 0; i <= numSegments; i++) {
+    const wp = WAYPOINTS[i % WAYPOINTS.length];
+    const t = computeTrackTangent(WAYPOINTS, i % WAYPOINTS.length);
+    const n = computeTrackNormal(i % WAYPOINTS.length, WAYPOINTS);
+    const rightX = -t.z;
+    const rightZ = t.x;
+
+    const leftX = wp.x + rightX * halfW;
+    const leftZ = wp.z + rightZ * halfW;
+    const rightX2 = wp.x - rightX * halfW;
+    const rightZ2 = wp.z - rightZ * halfW;
+
+    vertices.push(leftX, wp.y, leftZ);
+    vertices.push(rightX2, wp.y, rightZ2);
+
+    uvs.push(0, i / numSegments);
+    uvs.push(1, i / numSegments);
+
+    const speed = 0.3 + Math.sin(i * 0.1) * 0.1;
+    colors.push(0.04, 0.05, 0.15);
+    colors.push(0.04, 0.05, 0.15);
   }
-  
-  for (let i = 0; i < segments; i++) {
+
+  for (let i = 0; i < numSegments; i++) {
     const base = i * 2;
     indices.push(base, base + 1, base + 2);
     indices.push(base + 1, base + 3, base + 2);
   }
-  
+
+  const trackGeo = new THREE.BufferGeometry();
   trackGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  trackGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  trackGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   trackGeo.setIndex(indices);
   trackGeo.computeVertexNormals();
-  
-  const trackMat = new THREE.MeshStandardMaterial({
-    color: TRACK_COLOR,
-    roughness: 0.7,
-    metalness: 0.3,
-    side: THREE.DoubleSide
+
+  const trackMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uPlayerPos: { value: new THREE.Vector3() }
+    },
+    vertexShader: gridVertShader,
+    fragmentShader: gridFragShader,
+    side: THREE.DoubleSide,
+    transparent: true
   });
-  
+
   const trackSurface = new THREE.Mesh(trackGeo, trackMat);
-  trackSurface.position.y = 0.01;
+  trackSurface.name = 'trackSurface';
   trackGroup.add(trackSurface);
+  trackGroup.userData.trackMat = trackMat;
 
-  // === TRACK CENTER LINE (dashed) ===
-  const centerLineMat = new THREE.MeshStandardMaterial({
-    color: 0x333344,
-    roughness: 0.5,
-    metalness: 0.5
-  });
-  
-  const A = 30; // centerline x radius
-  const B = 200; // centerline z radius
-  
-  for (let i = 0; i < 32; i++) {
-    const t = (i / 32) * Math.PI * 2;
-    const x = A * Math.cos(t);
-    const z = B * Math.sin(t);
-    
-    const dashGeo = new THREE.BoxGeometry(0.5, 0.05, 4);
-    const dash = new THREE.Mesh(dashGeo, centerLineMat);
-    dash.position.set(x, 0.02, z);
-    // Orient tangent to ellipse
-    const tangentAngle = Math.atan2(B * Math.cos(t), -A * Math.sin(t));
-    dash.rotation.y = -t + Math.PI / 2;
-    trackGroup.add(dash);
-  }
-
-  // === BARRIER MATERIALS ===
   const barrierMatCyan = new THREE.MeshStandardMaterial({
     color: CYAN,
     emissive: CYAN,
-    emissiveIntensity: 1.2,
+    emissiveIntensity: 1.5,
     roughness: 0.2,
     metalness: 0.8
   });
+
   const barrierMatMagenta = new THREE.MeshStandardMaterial({
     color: MAGENTA,
     emissive: MAGENTA,
-    emissiveIntensity: 1.2,
+    emissiveIntensity: 1.5,
     roughness: 0.2,
     metalness: 0.8
   });
 
-  const barrierGeo = new THREE.BoxGeometry(1, BARRIER_HEIGHT, 1);
+  const barrierGeo = new THREE.BoxGeometry(0.8, BARRIER_HEIGHT, 1.5);
+  const barrierSegCount = 120;
 
-  // === BARRIERS ALONG OVAL ===
-  const BARRIER_SEGMENTS = 48;
-  for (let i = 0; i < BARRIER_SEGMENTS; i++) {
-    const t = (i / BARRIER_SEGMENTS) * Math.PI * 2;
-    const cosT = Math.cos(t);
-    const sinT = Math.sin(t);
-    
-    // Outer barrier (cyan) - on outer edge
-    const xOuter = (30 + TRACK_WIDTH / 2 + 0.5) * cosT;
-    const zOuter = (200 + TRACK_WIDTH / 2 + 0.5) * sinT;
-    const barrier1 = new THREE.Mesh(barrierGeo, barrierMatCyan);
-    barrier1.position.set(xOuter, BARRIER_HEIGHT / 2, zOuter);
-    trackGroup.add(barrier1);
-    
-    // Inner barrier (magenta) - on inner edge
-    const xInner = (30 - TRACK_WIDTH / 2 - 0.5) * cosT;
-    const zInner = (200 - TRACK_WIDTH / 2 - 0.5) * sinT;
-    const barrier2 = new THREE.Mesh(barrierGeo, barrierMatMagenta);
-    barrier2.position.set(xInner, BARRIER_HEIGHT / 2, zInner);
-    trackGroup.add(barrier2);
+  for (let i = 0; i < barrierSegCount; i++) {
+    const idx = Math.floor((i / barrierSegCount) * WAYPOINTS.length);
+    const wp = WAYPOINTS[idx % WAYPOINTS.length];
+    const nextIdx = (idx + 1) % WAYPOINTS.length;
+    const t = computeTrackTangent(WAYPOINTS, idx);
+    const rightX = -t.z;
+    const rightZ = t.x;
 
-    // === Sprint 6 Fix C: invisible collider wall segments ===
-    // Same x/z as the visible barrier, but with visible=false and a
-    // userData tag so the game loop can resolve wall hits.
-    const colliderGeo = new THREE.BoxGeometry(1.2, BARRIER_HEIGHT, 1.2);
-    const colliderMat = new THREE.MeshBasicMaterial({ visible: false });
-    const wallOuter = new THREE.Mesh(colliderGeo, colliderMat);
-    wallOuter.position.set(xOuter, BARRIER_HEIGHT / 2, zOuter);
-    wallOuter.userData.isWall = true;
-    wallOuter.userData.normalAngle = t; // radial outward normal
-    trackGroup.add(wallOuter);
-    const wallInner = new THREE.Mesh(colliderGeo.clone(), colliderMat);
-    wallInner.position.set(xInner, BARRIER_HEIGHT / 2, zInner);
-    wallInner.userData.isWall = true;
-    wallInner.userData.normalAngle = t + Math.PI; // radial inward
-    trackGroup.add(wallInner);
+    const outerX = wp.x + rightX * (halfW + 1);
+    const outerZ = wp.z + rightZ * (halfW + 1);
+    const innerX = wp.x - rightX * (halfW + 1);
+    const innerZ = wp.z - rightZ * (halfW + 1);
+
+    const outerBarrier = new THREE.Mesh(barrierGeo, barrierMatCyan);
+    outerBarrier.position.set(outerX, wp.y + BARRIER_HEIGHT / 2, outerZ);
+    outerBarrier.rotation.y = Math.atan2(t.x, t.z);
+    trackGroup.add(outerBarrier);
+
+    const innerBarrier = new THREE.Mesh(barrierGeo, barrierMatMagenta);
+    innerBarrier.position.set(innerX, wp.y + BARRIER_HEIGHT / 2, innerZ);
+    innerBarrier.rotation.y = Math.atan2(t.x, t.z);
+    trackGroup.add(innerBarrier);
+
+    const edgeGeo = new THREE.BoxGeometry(0.2, 0.3, 1.5);
+    const edgeMat = new THREE.MeshBasicMaterial({
+      color: CYAN,
+      transparent: true,
+      opacity: 0.9,
+      toneMapped: false
+    });
+    const outerEdge = new THREE.Mesh(edgeGeo, edgeMat);
+    outerEdge.position.set(outerX, wp.y + BARRIER_HEIGHT + 0.15, outerZ);
+    outerEdge.rotation.y = Math.atan2(t.x, t.z);
+    trackGroup.add(outerEdge);
+
+    const innerEdge = new THREE.Mesh(edgeGeo, new THREE.MeshBasicMaterial({
+      color: MAGENTA,
+      transparent: true,
+      opacity: 0.9,
+      toneMapped: false
+    }));
+    innerEdge.position.set(innerX, wp.y + BARRIER_HEIGHT + 0.15, innerZ);
+    innerEdge.rotation.y = Math.atan2(t.x, t.z);
+    trackGroup.add(innerEdge);
   }
 
-  // === SUPPORT PILLARS WITH LIGHTS ===
-  const pillarGeo = new THREE.CylinderGeometry(0.3, 0.3, 8, 8);
+  const pillarGeo = new THREE.CylinderGeometry(0.3, 0.3, 10, 8);
   const pillarMat = new THREE.MeshStandardMaterial({
     color: 0x1A1A2E,
     emissive: PURPLE,
-    emissiveIntensity: 0.5
+    emissiveIntensity: 0.4
   });
 
-  const PILLAR_COUNT = 16;
+  const PILLAR_COUNT = 20;
   for (let i = 0; i < PILLAR_COUNT; i++) {
-    const t = (i / PILLAR_COUNT) * Math.PI * 2;
-    
-    // Outer pillar position
-    const pillar1Pos = new THREE.Vector3(
-      (30 + TRACK_WIDTH / 2 + 2) * Math.cos(t),
-      4,
-      (200 + TRACK_WIDTH / 2 + 2) * Math.sin(t)
+    const idx = Math.floor((i / PILLAR_COUNT) * WAYPOINTS.length);
+    const wp = WAYPOINTS[idx];
+    const t = computeTrackTangent(WAYPOINTS, idx);
+    const rightX = -t.z;
+    const rightZ = t.x;
+
+    const pillarPos = new THREE.Vector3(
+      wp.x + rightX * (halfW + 3),
+      wp.y / 2 + 5,
+      wp.z + rightZ * (halfW + 3)
     );
-    const pillar1 = new THREE.Mesh(pillarGeo, pillarMat);
-    pillar1.position.copy(pillar1Pos);
-    trackGroup.add(pillar1);
 
-    // Light on outer pillar
-    const lightGeo = new THREE.SphereGeometry(0.5, 8, 8);
-    const light1 = new THREE.Mesh(lightGeo, barrierMatCyan);
-    light1.position.set(pillar1Pos.x, 8.5, pillar1Pos.z);
-    trackGroup.add(light1);
+    const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+    pillar.position.copy(pillarPos);
+    pillar.position.y = wp.y / 2 + 5;
+    trackGroup.add(pillar);
 
-    // Inner pillar (opposite side)
-    const pillar2Pos = new THREE.Vector3(
-      (30 - TRACK_WIDTH / 2 - 2) * Math.cos(t),
-      4,
-      (200 - TRACK_WIDTH / 2 - 2) * Math.sin(t)
-    );
-    const pillar2 = new THREE.Mesh(pillarGeo, pillarMat);
-    pillar2.position.copy(pillar2Pos);
-    trackGroup.add(pillar2);
+    const lightGeo = new THREE.SphereGeometry(0.4, 8, 8);
+    const light = new THREE.Mesh(lightGeo, barrierMatCyan);
+    light.position.set(pillarPos.x, wp.y + 10, pillarPos.z);
+    trackGroup.add(light);
+  }
 
-    // Light on inner pillar
-    const light2 = new THREE.Mesh(lightGeo, barrierMatMagenta);
-    light2.position.set(pillar2Pos.x, 8.5, pillar2Pos.z);
-    trackGroup.add(light2);
+  const boostGeo = new THREE.BoxGeometry(4, 0.1, 8);
+  const boostMat = new THREE.MeshBasicMaterial({
+    color: 0x00FF88,
+    transparent: true,
+    opacity: 0.8,
+    toneMapped: false
+  });
+
+  for (const pad of BOOST_PADS) {
+    const boost = new THREE.Mesh(boostGeo, boostMat.clone());
+    boost.position.set(pad.x, pad.y + 0.1, pad.z);
+    boost.rotation.y = pad.angle;
+    boost.userData.isBoostPad = true;
+    boost.userData.strength = pad.strength;
+    trackGroup.add(boost);
+
+    const arrowGeo = new THREE.ConeGeometry(0.8, 2, 4);
+    const arrowMat = new THREE.MeshBasicMaterial({
+      color: 0x00FF88,
+      transparent: true,
+      opacity: 0.9,
+      toneMapped: false
+    });
+    for (let a = 0; a < 3; a++) {
+      const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+      arrow.position.set(pad.x + Math.cos(pad.angle) * (a * 2 - 2), pad.y + 0.3, pad.z + Math.sin(pad.angle) * (a * 2 - 2));
+      arrow.rotation.x = Math.PI / 2;
+      arrow.rotation.z = -pad.angle;
+      trackGroup.add(arrow);
+    }
   }
 
   scene.add(trackGroup);
 
   return {
     group: trackGroup,
-    length: TRACK_LENGTH,
+    length: WAYPOINTS.length,
     width: TRACK_WIDTH
   };
 }
@@ -209,63 +290,65 @@ export function createFinishLine(scene) {
   const gateGroup = new THREE.Group();
   gateGroup.name = 'finishLine';
 
-  // Finish line at the bottom of the oval (z = -200)
-  const FINISH_Z = -200;
-  
-  const postGeo = new THREE.BoxGeometry(1, 10, 1);
+  const startWp = WAYPOINTS[0];
+  const nextWp = WAYPOINTS[1];
+  const dx = nextWp.x - startWp.x;
+  const dz = nextWp.z - startWp.z;
+  const angle = Math.atan2(dx, dz);
+  const rightX = -Math.sin(angle);
+  const rightZ = Math.cos(angle);
+
+  const postGeo = new THREE.BoxGeometry(1, 12, 1);
   const postMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     emissive: 0xffffff,
-    emissiveIntensity: 0.5
+    emissiveIntensity: 0.8
   });
 
-  // Posts at the track edges
   const leftPost = new THREE.Mesh(postGeo, postMat);
-  leftPost.position.set(-TRACK_WIDTH / 2 - 1, 5, FINISH_Z);
+  leftPost.position.set(
+    startWp.x + rightX * (TRACK_WIDTH / 2 + 1),
+    startWp.y + 6,
+    startWp.z + rightZ * (TRACK_WIDTH / 2 + 1)
+  );
   gateGroup.add(leftPost);
 
   const rightPost = new THREE.Mesh(postGeo, postMat);
-  rightPost.position.set(TRACK_WIDTH / 2 + 1, 5, FINISH_Z);
+  rightPost.position.set(
+    startWp.x - rightX * (TRACK_WIDTH / 2 + 1),
+    startWp.y + 6,
+    startWp.z - rightZ * (TRACK_WIDTH / 2 + 1)
+  );
   gateGroup.add(rightPost);
 
-  // Checkered banner
   const stripeGeo = new THREE.BoxGeometry(TRACK_WIDTH + 4, 0.5, 1);
   const stripeMatWhite = new THREE.MeshStandardMaterial({ color: 0xffffff });
   const stripeMatBlack = new THREE.MeshStandardMaterial({ color: 0x000000 });
 
   for (let i = 0; i < 8; i++) {
     const stripe = new THREE.Mesh(stripeGeo, i % 2 === 0 ? stripeMatWhite : stripeMatBlack);
-    stripe.position.set(0, 9.5, -3 + i * 1);
+    stripe.position.set(startWp.x, startWp.y + 11.5, startWp.z - 3 + i * 1);
+    stripe.rotation.y = angle;
     gateGroup.add(stripe);
   }
 
-  // Glow effect
   const glowMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     emissive: 0xffffff,
-    emissiveIntensity: 1,
+    emissiveIntensity: 1.5,
     transparent: true,
-    opacity: 0.6
+    opacity: 0.7,
+    toneMapped: false
   });
   const glowGeo = new THREE.BoxGeometry(TRACK_WIDTH + 4, 0.2, 2);
   const glow = new THREE.Mesh(glowGeo, glowMat);
-  glow.position.set(0, 10.2, FINISH_Z);
+  glow.position.set(startWp.x, startWp.y + 12.5, startWp.z);
+  glow.rotation.y = angle;
   gateGroup.add(glow);
 
   scene.add(gateGroup);
-
   return gateGroup;
 }
-
-// === CHECKPOINT RINGS (Fix B) ===
-// 4 cyan torus rings at the 4 CHECKPOINTS positions. When a car
-// crosses one, the ring flashes magenta + briefly enlarges.
-const CHECKPOINTS = [
-  { id: 0, x: 0,   z: -200, r: 15 },
-  { id: 1, x: 30,  z: 0,    r: 15 },
-  { id: 2, x: 0,   z: 200,  r: 15 },
-  { id: 3, x: -30, z: 0,    r: 15 }
-];
 
 export function createCheckpointRings(scene) {
   const group = new THREE.Group();
@@ -274,26 +357,24 @@ export function createCheckpointRings(scene) {
   group.userData.checkpoints = CHECKPOINTS;
 
   for (const cp of CHECKPOINTS) {
-    // Two stacked tori for a thicker neon look
     const ringGeo = new THREE.TorusGeometry(12, 0.4, 8, 32);
     const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x00F5FF,            // cyan
+      color: 0x00F5FF,
       transparent: true,
       opacity: 0.85,
-      toneMapped: false          // unaffected by tone-mapping for max neon
+      toneMapped: false
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.position.set(cp.x, 3, cp.z);
-    ring.rotation.x = Math.PI / 2; // face up (so the ring is horizontal)
+    ring.position.set(cp.x, cp.y + 3, cp.z);
+    ring.rotation.x = Math.PI / 2;
     ring.userData.checkpointId = cp.id;
     ring.userData.flashUntil = 0;
     ring.userData.baseScale = 1;
     group.add(ring);
     group.userData.rings.push(ring);
 
-    // A second torus rotated 90° for a more visible "tube" silhouette
     const ring2 = new THREE.Mesh(ringGeo.clone(), ringMat.clone());
-    ring2.position.set(cp.x, 3, cp.z);
+    ring2.position.set(cp.x, cp.y + 3, cp.z);
     ring2.rotation.set(Math.PI / 2, 0, Math.PI / 2);
     group.add(ring2);
   }
@@ -302,43 +383,63 @@ export function createCheckpointRings(scene) {
   return group;
 }
 
-// Trigger a flash on the ring just hit.
 export function flashCheckpoint(ringGroup, checkpointId, now = performance.now()) {
   for (const r of ringGroup.userData.rings) {
     if (r.userData.checkpointId === checkpointId) {
-      r.userData.flashUntil = now + 500; // 500ms flash
+      r.userData.flashUntil = now + 500;
     }
   }
 }
 
-// Per-frame update: any ring whose flashUntil is in the future pulses
-// pink + slightly larger; all others stay cyan.
-// Wipeout-style: the *next* ring (nextCheckpoint index) gets full pulse,
-// the *following* ring (nextCheckpoint+1) gets 0.4 intensity,
-// all others get 0.2 (so the player sees a clear "follow this" hierarchy).
 export function updateCheckpointRings(ringGroup, now = performance.now(), nextCheckpoint = -1) {
-  // Compute target intensity for each ring index
   const getIntensity = (i) => {
-    if (i === nextCheckpoint) return 1.0;        // NEXT — full glow
-    if (nextCheckpoint >= 0 && i === (nextCheckpoint + 1) % ringGroup.userData.checkpoints.length) return 0.4;  // FOLLOWING
-    return 0.2;                                  // others
+    if (i === nextCheckpoint) return 1.0;
+    if (nextCheckpoint >= 0 && i === (nextCheckpoint + 1) % ringGroup.userData.checkpoints.length) return 0.4;
+    return 0.2;
   };
 
   for (const r of ringGroup.userData.rings) {
     const flashing = now < (r.userData.flashUntil || 0);
     if (flashing) {
-      r.material.color.setHex(0xFF006E); // magenta
+      r.material.color.setHex(0xFF006E);
       const t = (r.userData.flashUntil - now) / 500;
       const s = 1.0 + 0.4 * t;
       r.scale.set(s, s, s);
     } else {
-      r.material.color.setHex(0x00F5FF); // cyan
+      r.material.color.setHex(0x00F5FF);
       r.scale.set(1, 1, 1);
-      // Wipeout-style 3-level pulse on the NEXT ring
       const id = r.userData.checkpointId;
       const target = getIntensity(id);
       const pulse = target + 0.3 * Math.sin(now * 0.004) * (target > 0.5 ? 1 : 0);
-      r.material.opacity = 0.4 + 0.5 * pulse; // 0.4 (dim) → 0.9 (full pulse)
+      r.material.opacity = 0.4 + 0.5 * pulse;
     }
+  }
+}
+
+export function getClosestWaypointIndex(x, z) {
+  let nearestDist = Infinity;
+  let nearestIdx = 0;
+  for (let i = 0; i < WAYPOINTS.length; i++) {
+    const wp = WAYPOINTS[i];
+    const dist = Math.hypot(wp.x - x, wp.z - z);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearestIdx = i;
+    }
+  }
+  return nearestIdx;
+}
+
+export function isOnTrack(x, z) {
+  const idx = getClosestWaypointIndex(x, z);
+  const wp = WAYPOINTS[idx];
+  const dist = Math.hypot(wp.x - x, wp.z - z);
+  return dist < TRACK_WIDTH / 2 + 2;
+}
+
+export function updateTrackShader(trackGroup, time, playerPos) {
+  if (trackGroup.userData.trackMat) {
+    trackGroup.userData.trackMat.uniforms.uTime.value = time;
+    trackGroup.userData.trackMat.uniforms.uPlayerPos.value.copy(playerPos);
   }
 }
