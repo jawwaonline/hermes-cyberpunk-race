@@ -5,7 +5,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { FilmPass } from 'three/addons/postprocessing/FilmPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { createTrack, createFinishLine, createCheckpointRings, updateCheckpointRings, flashCheckpoint, updateTrackShader, WAYPOINTS } from './track.js';
+import { createTrack, createFinishLine, createCheckpointRings, updateCheckpointRings, flashCheckpoint, updateTrackShader, updateFinishLine, WAYPOINTS } from './track.js';
 import { Car } from './car.js';
 import { Controls } from './controls.js';
 import { sounds } from './sounds.js';
@@ -520,6 +520,10 @@ export class Game {
 
     if (this.sunMaterial) {
       this.sunMaterial.uniforms.uTime.value = now * 0.001;
+    }
+
+    if (this.finishLine) {
+      updateFinishLine(this.finishLine, now * 0.001);
     }
 
     if (this.track && this.track.group) {

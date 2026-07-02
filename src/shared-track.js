@@ -3,21 +3,23 @@ export const TRACK_WIDTH = 20;
 export const TRACK_LENGTH = 400;
 
 const CONTROL_POINTS = [
-  { x: 0,   z: -180, y: 0 },   // Start/finish straight
-  { x: 40,  z: -160, y: 0 },   // gentle right curve
-  { x: 70,  z: -100, y: 0 },   // sweeping right
-  { x: 80,  z: -30,  y: 5 },   // banking up (hill start)
-  { x: 75,  z: 40,   y: 15 },  // elevated hairpin approach
-  { x: 50,  z: 90,   y: 20 },  // apex of elevated hairpin
-  { x: 20,  z: 120,  y: 15 },  // descent from hairpin
-  { x: -20, z: 150,  y: 0 },   // chicane entry
-  { x: -50, z: 130,  y: 0 },   // chicane middle (left)
-  { x: -70, z: 90,   y: 0 },   // chicane exit (right)
-  { x: -80, z: 30,   y: 5 },   // banked sweeper entry
-  { x: -80, z: -40,  y: 10 },  // banked turn (high speed)
-  { x: -60, z: -100, y: 5 },   // exit bank, descending
-  { x: -30, z: -140, y: 0 },   // back straight approach
-  { x: 0,   z: -180, y: 0 },   // close loop
+  { x: 0,   z: -200, y: 0 },   // Start/finish straight
+  { x: 50,  z: -190, y: 0 },   // gentle right curve start
+  { x: 90,  z: -150, y: 3 },   // sweeping right - mild banking
+  { x: 120, z: -90,  y: 8 },   // climbing into hairpin
+  { x: 130, z: -20,  y: 15 },  // sharp right turn entry
+  { x: 110, z: 50,   y: 22 },  // apex of elevated hairpin
+  { x: 60,  z: 100,  y: 18 },  // descending from hairpin
+  { x: 10,  z: 140,  y: 5 },   // chicane entry
+  { x: -30, z: 160,  y: 0 },   // sharp left chicane
+  { x: -70, z: 140,  y: 3 },   // chicane middle
+  { x: -100, z: 90,  y: 0 },   // chicane exit
+  { x: -110, z: 30,  y: 8 },   // sweeping curve entry (banked)
+  { x: -100, z: -40, y: 15 },  // high-speed banked turn
+  { x: -60,  z: -90, y: 10 },  // descending sweeper
+  { x: -20,  z: -130, y: 3 },  // back straight approach
+  { x: 10,   z: -170, y: 0 },  // final curve to start/finish
+  { x: 0,    z: -200, y: 0 },  // close loop
 ];
 
 const SAMPLES_PER_SEGMENT = 8;

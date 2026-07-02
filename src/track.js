@@ -322,6 +322,52 @@ export function createTrack(scene) {
     trackGroup.add(arrow);
   }
 
+  const neonStripMatCyan = new THREE.MeshBasicMaterial({
+    color: 0x00F5FF,
+    transparent: true,
+    opacity: 0.6,
+    toneMapped: false
+  });
+  const neonStripMatPink = new THREE.MeshBasicMaterial({
+    color: 0xFF006E,
+    transparent: true,
+    opacity: 0.6,
+    toneMapped: false
+  });
+
+  const STRIP_SEGMENTS = 100;
+  for (let side = -1; side <= 1; side += 2) {
+    const stripVertices = [];
+    const stripIndices = [];
+    const halfW = TRACK_WIDTH / 2 + 0.5;
+
+    for (let i = 0; i <= STRIP_SEGMENTS; i++) {
+      const idx = Math.floor((i / STRIP_SEGMENTS) * WAYPOINTS.length);
+      const wp = WAYPOINTS[idx % WAYPOINTS.length];
+      const t = computeTrackTangent(WAYPOINTS, idx);
+      const rightX = -t.z;
+      const rightZ = t.x;
+
+      const x = wp.x + rightX * halfW * side;
+      const z = wp.z + rightZ * halfW * side;
+      stripVertices.push(x, wp.y + 0.2, z);
+    }
+
+    for (let i = 0; i < STRIP_SEGMENTS; i++) {
+      const base = i;
+      stripIndices.push(base, base + 1, base + STRIP_SEGMENTS + 1);
+      stripIndices.push(base + 1, base + STRIP_SEGMENTS + 2, base + STRIP_SEGMENTS + 1);
+    }
+
+    const stripGeo = new THREE.BufferGeometry();
+    stripGeo.setAttribute('position', new THREE.Float32BufferAttribute(stripVertices, 3));
+    stripGeo.setIndex(stripIndices);
+    stripGeo.computeVertexNormals();
+
+    const strip = new THREE.Mesh(stripGeo, side === -1 ? neonStripMatCyan : neonStripMatPink);
+    trackGroup.add(strip);
+  }
+
   scene.add(trackGroup);
 
   return {
@@ -377,22 +423,69 @@ export function createFinishLine(scene) {
     gateGroup.add(stripe);
   }
 
-  const glowMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    emissive: 0xffffff,
-    emissiveIntensity: 1.5,
+  const glowVertShader = `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `;
+  const glowFragShader = `
+    uniform float uTime;
+    varying vec2 vUv;
+    void main() {
+      float pulse = 0.7 + 0.3 * sin(uTime * 4.0);
+      vec3 cyan = vec3(0.0, 0.96, 1.0);
+      vec3 pink = vec3(1.0, 0.0, 0.43);
+      float mixFactor = sin(uTime * 2.0) * 0.5 + 0.5;
+      vec3 color = mix(cyan, pink, mixFactor);
+      float stripe = step(0.5, fract(vUv.x * 8.0));
+      color = mix(color, vec3(1.0), stripe * 0.5);
+      gl_FragColor = vec4(color * pulse, 0.9);
+    }
+  `;
+  const glowMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: glowVertShader,
+    fragmentShader: glowFragShader,
     transparent: true,
-    opacity: 0.7,
+    side: THREE.DoubleSide,
     toneMapped: false
   });
-  const glowGeo = new THREE.BoxGeometry(TRACK_WIDTH + 4, 0.2, 2);
+  const glowGeo = new THREE.BoxGeometry(TRACK_WIDTH + 4, 0.3, 3);
   const glow = new THREE.Mesh(glowGeo, glowMat);
-  glow.position.set(startWp.x, startWp.y + 12.5, startWp.z);
+  glow.position.set(startWp.x, startWp.y + 13, startWp.z);
   glow.rotation.y = angle;
+  glow.name = 'finishGlow';
   gateGroup.add(glow);
+
+  const stripGeo = new THREE.BoxGeometry(TRACK_WIDTH + 6, 0.1, 0.3);
+  const stripMat = new THREE.MeshBasicMaterial({
+    color: 0x00F5FF,
+    transparent: true,
+    opacity: 0.8,
+    toneMapped: false
+  });
+  for (let side = -1; side <= 1; side += 2) {
+    const strip = new THREE.Mesh(stripGeo, stripMat.clone());
+    strip.position.set(
+      startWp.x + rightX * (TRACK_WIDTH / 2 + 1.5) * side,
+      startWp.y + 0.1,
+      startWp.z + rightZ * (TRACK_WIDTH / 2 + 1.5) * side
+    );
+    strip.rotation.y = angle;
+    gateGroup.add(strip);
+  }
 
   scene.add(gateGroup);
   return gateGroup;
+}
+
+export function updateFinishLine(finishLine, time) {
+  const glow = finishLine.getObjectByName('finishGlow');
+  if (glow && glow.material.uniforms) {
+    glow.material.uniforms.uTime.value = time;
+  }
 }
 
 export function createCheckpointRings(scene) {
