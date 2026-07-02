@@ -5,6 +5,7 @@ import {
   hideEndScreen
 } from './ui.js';
 import { VERSION } from './version.js';
+import { sounds } from './sounds.js';
 
 console.log(`%c[CyberpunkRace] v${VERSION}`, 'color:#0ff;font-weight:bold');
 const badge = document.getElementById('version-badge');
@@ -43,6 +44,8 @@ class CyberpunkRaceClient {
     });
 
     showModeScreen();
+    sounds.init();
+    sounds.playMenuMusic();
   }
 
   connect(url) {
@@ -89,6 +92,7 @@ class CyberpunkRaceClient {
         hideWaiting();
         hideModeScreen();
         showHUD();
+        sounds.stopMenuMusic();
         this.game.startMode(this.playerIndex === 0 ? 'ai' : 'hvh');
         this.startPositionBroadcast();
         break;
@@ -106,6 +110,7 @@ class CyberpunkRaceClient {
         if (this.game && this.game.isRunning) {
           this.game.isRunning = false;
           this.game.onRaceEnd(true); // Player wins
+          sounds.stopAll();
           // Show a notification
           const hud = document.getElementById('lap-current');
           if (hud) hud.textContent = 'YOU WIN — OPPONENT LEFT';
@@ -223,6 +228,9 @@ class CyberpunkRaceClient {
     const container = document.getElementById('game-container');
     this.game = new Game(container);
     showModeScreen();
+    sounds.stopAll();
+    sounds.init();
+    sounds.playMenuMusic();
   }
 }
 

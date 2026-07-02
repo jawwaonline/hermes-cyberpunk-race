@@ -8,6 +8,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { createTrack, createFinishLine, createCheckpointRings, updateCheckpointRings, flashCheckpoint, updateTrackShader, WAYPOINTS } from './track.js';
 import { Car } from './car.js';
 import { Controls } from './controls.js';
+import { sounds } from './sounds.js';
 
 const ChromaticAberrationShader = {
   uniforms: {
@@ -71,151 +72,6 @@ const VignetteShader = {
   `
 };
 
-class CyberpunkAudio {
-  constructor() {
-    this.ctx = null;
-    this.masterGain = null;
-    this.engineOsc = null;
-    this.engineGain = null;
-    this.engineFilter = null;
-    this.musicGain = null;
-    this.muted = false;
-    this.initialized = false;
-  }
-
-  init() {
-    if (this.initialized) return;
-    try {
-      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.value = 0.3;
-      this.masterGain.connect(this.ctx.destination);
-
-      this.engineOsc = this.ctx.createOscillator();
-      this.engineOsc.type = 'sawtooth';
-      this.engineOsc.frequency.value = 80;
-
-      this.engineFilter = this.ctx.createBiquadFilter();
-      this.engineFilter.type = 'lowpass';
-      this.engineFilter.frequency.value = 300;
-
-      this.engineGain = this.ctx.createGain();
-      this.engineGain.gain.value = 0.15;
-
-      this.engineOsc.connect(this.engineFilter);
-      this.engineFilter.connect(this.engineGain);
-      this.engineGain.connect(this.masterGain);
-      this.engineOsc.start();
-
-      this.startMusic();
-      this.initialized = true;
-    } catch (e) {
-      console.warn('WebAudio not available:', e);
-    }
-  }
-
-  startMusic() {
-    if (!this.ctx) return;
-    const bpm = 120;
-    const beatDur = 60 / bpm;
-
-    const notes = [
-      { f: 220, t: 0 }, { f: 261.6, t: 0.25 }, { f: 329.6, t: 0.5 }, { f: 261.6, t: 0.75 },
-      { f: 196, t: 1 }, { f: 220, t: 1.25 }, { f: 261.6, t: 1.5 }, { f: 196, t: 1.75 },
-      { f: 174.6, t: 2 }, { f: 220, t: 2.25 }, { f: 261.6, t: 2.5 }, { f: 329.6, t: 2.75 },
-      { f: 293.7, t: 3 }, { f: 261.6, t: 3.25 }, { f: 220, t: 3.5 }, { f: 196, t: 3.75 },
-    ];
-
-    const playVoice = (detune) => {
-      const gain = this.ctx.createGain();
-      gain.gain.value = 0.04;
-      gain.connect(this.masterGain);
-
-      const osc = this.ctx.createOscillator();
-      osc.type = 'square';
-      osc.detune.value = detune;
-      osc.frequency.value = 110;
-
-      const seq = (time) => {
-        for (const n of notes) {
-          osc.frequency.setValueAtTime(n.f, time + n.t * beatDur * 4);
-        }
-        osc.frequency.setValueAtTime(notes[0].f, time + 4 * beatDur * 4);
-      };
-
-      seq(this.ctx.currentTime);
-      osc.start();
-      return osc;
-    };
-
-    playVoice(0);
-    playVoice(-15);
-    playVoice(15);
-  }
-
-  updateEngine(speed) {
-    if (!this.engineOsc || !this.ctx) return;
-    const normSpeed = speed / 300;
-    this.engineOsc.frequency.setTargetAtTime(60 + normSpeed * 200, this.ctx.currentTime, 0.1);
-    this.engineFilter.frequency.setTargetAtTime(200 + normSpeed * 800, this.ctx.currentTime, 0.1);
-  }
-
-  playCheckpoint() {
-    if (!this.ctx || this.muted) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1760, this.ctx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.2);
-  }
-
-  playLapComplete() {
-    if (!this.ctx || this.muted) return;
-    const notes = [523.25, 659.25, 783.99, 1046.5];
-    notes.forEach((f, i) => {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.value = f;
-      gain.gain.setValueAtTime(0.15, this.ctx.currentTime + i * 0.08);
-      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + i * 0.08 + 0.15);
-      osc.connect(gain);
-      gain.connect(this.masterGain);
-      osc.start(this.ctx.currentTime + i * 0.08);
-      osc.stop(this.ctx.currentTime + i * 0.08 + 0.15);
-    });
-  }
-
-  playCrash() {
-    if (!this.ctx || this.muted) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(150, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.3);
-    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.3);
-  }
-
-  toggleMute() {
-    this.muted = !this.muted;
-    if (this.masterGain) {
-      this.masterGain.gain.setTargetAtTime(this.muted ? 0 : 0.3, this.ctx.currentTime, 0.1);
-    }
-    return this.muted;
-  }
-}
-
 export class Game {
   constructor(container) {
     this.container = container;
@@ -232,7 +88,7 @@ export class Game {
     this.mode = 'ai';
     this.aiProgress = 0;
     this.playerProgress = 0;
-    this.audio = new CyberpunkAudio();
+    this.audio = sounds;
     this.chromaticPass = null;
     this.vignettePass = null;
     this.rainParticles = null;
@@ -606,6 +462,7 @@ export class Game {
 
     this.lastTime = performance.now();
     this.audio.init();
+    this.audio.startEngine();
     this.animate();
   }
 
@@ -772,6 +629,8 @@ export class Game {
   onRaceEnd(playerWon) {
     const endScreen = document.getElementById('end-screen');
     const endTitle = document.getElementById('end-title');
+
+    sounds.stopAll();
 
     if (playerWon) {
       endScreen.className = 'win';
