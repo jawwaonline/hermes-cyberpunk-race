@@ -444,15 +444,18 @@ export class Game {
     arrow.scale.set(pulse, pulse, pulse);
   }
 
-  startMode(mode) {
+  startMode(mode, playerName = 'Player 1') {
     this.mode = mode;
+    this.playerName = playerName;
     this.isRunning = true;
+    this.countdownActive = false;
 
     if (this.playerCar) this.scene.remove(this.playerCar.mesh);
     if (this.aiCar) this.scene.remove(this.aiCar.mesh);
 
     this.playerCar = new Car(this.scene, true, 0x00ffff);
     this.playerCar.totalLaps = 3;
+    this.playerCar.playerName = playerName;
 
     if (mode === 'ai') {
       this.aiCar = new Car(this.scene, false, 0xff00ff);
@@ -464,6 +467,10 @@ export class Game {
     this.audio.init();
     this.audio.startEngine();
     this.animate();
+  }
+
+  endCountdown() {
+    this.countdownActive = false;
   }
 
   animate() {
@@ -723,6 +730,7 @@ export class Game {
   }
 
   restart() {
+    this.countdownActive = false;
     if (this.playerCar) this.playerCar.reset();
     if (this.aiCar) {
       this.aiCar.reset();

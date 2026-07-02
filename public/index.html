@@ -220,6 +220,35 @@
         rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px
       );
     }
+
+    #countdown-overlay {
+      position: fixed; inset: 0;
+      display: none;
+      align-items: center; justify-content: center;
+      background: rgba(10, 14, 39, 0.7);
+      z-index: 150;
+    }
+    #countdown-overlay.active {
+      display: flex;
+    }
+    #countdown-text {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 12rem;
+      font-weight: 700;
+      color: var(--cyan);
+      text-shadow: 0 0 40px var(--cyan), 0 0 80px var(--cyan), 0 0 120px var(--cyan);
+      animation: countdown-pulse 1s ease-out forwards;
+    }
+    #countdown-text.go {
+      color: var(--pink);
+      text-shadow: 0 0 40px var(--pink), 0 0 80px var(--pink), 0 0 120px var(--pink);
+    }
+    @keyframes countdown-pulse {
+      0% { transform: scale(2); opacity: 0; }
+      20% { transform: scale(1); opacity: 1; }
+      80% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(0.8); opacity: 0; }
+    }
   </style>
   <script type="importmap">
   {
@@ -296,6 +325,10 @@
 
   <div id="scanlines"></div>
   <div id="version-badge"></div>
+
+  <div id="countdown-overlay">
+    <div id="countdown-text">3</div>
+  </div>
 
   <script type="module" src="/src/client.js"></script>
 </body>

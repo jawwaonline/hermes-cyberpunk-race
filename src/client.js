@@ -20,6 +20,8 @@ class CyberpunkRaceClient {
     this.isRaceStarted = false;
     this.waitingTimer = null;
     this.waitingStartTime = null;
+    this.playerName = 'Player 1';
+    this.countdownActive = false;
     this.initUI();
   }
 
@@ -91,10 +93,8 @@ class CyberpunkRaceClient {
         this.stopWaitingTimer();
         hideWaiting();
         hideModeScreen();
-        showHUD();
         sounds.stopMenuMusic();
-        this.game.startMode(this.playerIndex === 0 ? 'ai' : 'hvh');
-        this.startPositionBroadcast();
+        this.startCountdown();
         break;
 
       case 'opponent':
@@ -189,6 +189,41 @@ class CyberpunkRaceClient {
     }, 50);
   }
 
+  startCountdown() {
+    const overlay = document.getElementById('countdown-overlay');
+    const text = document.getElementById('countdown-text');
+    overlay.classList.add('active');
+
+    const counts = ['3', '2', '1', 'GO!'];
+    let idx = 0;
+
+    const showCount = () => {
+      if (idx < counts.length) {
+        text.textContent = counts[idx];
+        text.className = idx === counts.length - 1 ? 'go' : '';
+        text.style.animation = 'none';
+        text.offsetHeight;
+        text.style.animation = 'countdown-pulse 1s ease-out forwards';
+
+        if (idx === counts.length - 1) {
+          sounds.playCountdownGo();
+        } else {
+          sounds.playCountdownBeep();
+        }
+
+        idx++;
+        setTimeout(showCount, 1000);
+      } else {
+        overlay.classList.remove('active');
+        showHUD();
+        this.game.startMode(this.playerIndex === 0 ? 'ai' : 'hvh', this.playerName);
+        this.startPositionBroadcast();
+      }
+    };
+
+    showCount();
+  }
+
   async restart() {
     hideEndScreen();
     this.game.restart();
@@ -227,6 +262,8 @@ class CyberpunkRaceClient {
     this.game.destroy();
     const container = document.getElementById('game-container');
     this.game = new Game(container);
+    const overlay = document.getElementById('countdown-overlay');
+    if (overlay) overlay.classList.remove('active');
     showModeScreen();
     sounds.stopAll();
     sounds.init();
