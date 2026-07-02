@@ -264,7 +264,7 @@ export function createTrack(scene) {
     toneMapped: false
   });
 
-  for (const pad of BOOST_PADS) {
+    for (const pad of BOOST_PADS) {
     const boost = new THREE.Mesh(boostGeo, boostMat.clone());
     boost.position.set(pad.x, pad.y + 0.1, pad.z);
     boost.rotation.y = pad.angle;
@@ -286,6 +286,40 @@ export function createTrack(scene) {
       arrow.rotation.z = -pad.angle;
       trackGroup.add(arrow);
     }
+  }
+
+  const arrowShape = new THREE.Shape();
+  arrowShape.moveTo(0, 2);
+  arrowShape.lineTo(1.2, -1);
+  arrowShape.lineTo(0.4, -0.5);
+  arrowShape.lineTo(0.4, -2);
+  arrowShape.lineTo(-0.4, -2);
+  arrowShape.lineTo(-0.4, -0.5);
+  arrowShape.lineTo(-1.2, -1);
+  arrowShape.closePath();
+
+  const arrowGeo = new THREE.ShapeGeometry(arrowShape);
+  const arrowMat = new THREE.MeshBasicMaterial({
+    color: 0x00F5FF,
+    transparent: true,
+    opacity: 0.35,
+    side: THREE.DoubleSide,
+    toneMapped: false
+  });
+
+  const ARROW_INTERVAL = 8;
+  for (let i = 0; i < WAYPOINTS.length; i += ARROW_INTERVAL) {
+    const wp = WAYPOINTS[i];
+    const nextWp = WAYPOINTS[(i + 1) % WAYPOINTS.length];
+    const dx = nextWp.x - wp.x;
+    const dz = nextWp.z - wp.z;
+    const angle = Math.atan2(dx, dz);
+
+    const arrow = new THREE.Mesh(arrowGeo, arrowMat.clone());
+    arrow.position.set(wp.x, wp.y + 0.15, wp.z);
+    arrow.rotation.x = -Math.PI / 2;
+    arrow.rotation.z = -angle;
+    trackGroup.add(arrow);
   }
 
   scene.add(trackGroup);
