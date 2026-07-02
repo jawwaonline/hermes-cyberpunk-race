@@ -20,11 +20,22 @@ const DEEP_BLUE = 0x0A0E27;
 const TRACK_COLOR = 0x0A0E27;
 
 function computeTrackTangent(waypoints, i) {
-  const next = (i + 1) % waypoints.length;
+  const n = waypoints.length;
+  const next = i + 1 < n ? i + 1 : 0;
   const dx = waypoints[next].x - waypoints[i].x;
   const dz = waypoints[next].z - waypoints[i].z;
   const dy = waypoints[next].y - waypoints[i].y;
   const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (len < 1e-6) {
+    // Degenerate case (duplicate waypoint at closure). Fall back to a
+    // forward tangent from the previous waypoint, or zero vector if at i=0.
+    const prev = i > 0 ? i - 1 : 0;
+    const pdx = waypoints[i].x - waypoints[prev].x;
+    const pdz = waypoints[i].z - waypoints[prev].z;
+    const pdy = waypoints[i].y - waypoints[prev].y;
+    const plen = Math.sqrt(pdx * pdx + pdy * pdy + pdz * pdz) || 1;
+    return { x: pdx / plen, y: pdy / plen, z: pdz / plen };
+  }
   return { x: dx / len, y: dy / len, z: dz / len };
 }
 

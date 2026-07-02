@@ -43,7 +43,7 @@ function generateWaypoints() {
     const p2 = CONTROL_POINTS[(i + 1) % n];
     const p3 = CONTROL_POINTS[(i + 2) % n];
 
-    const samples = (i < n - 1) ? SAMPLES_PER_SEGMENT : SAMPLES_PER_SEGMENT - 1;
+    const samples = (i < n - 1) ? SAMPLES_PER_SEGMENT : SAMPLES_PER_SEGMENT;
     for (let j = 0; j < samples; j++) {
       const t = j / SAMPLES_PER_SEGMENT;
       const pt = catmullRom(p0, p1, p2, p3, t);
@@ -51,8 +51,14 @@ function generateWaypoints() {
     }
   }
 
-  WAYPOINTS.push({ ...WAYPOINTS[0] });
-
+  // Sprint 10 fix: snap the very last waypoint to the first one. The Catmull-Rom
+  // spline's last segment can end a few metres off the start because of how
+  // the parameter `t` runs (it goes 0..1-1/N at the last sample). Snapping
+  // ensures a truly closed loop for the racing track — without this, the
+  // player's "lap" never completes and `computeTrackTangent` would produce
+  // a near-zero-length vector between the last and first waypoints, which
+  // Three.js reports as "Computed radius is NaN".
+  WAYPOINTS[WAYPOINTS.length - 1] = { ...WAYPOINTS[0] };
   return WAYPOINTS;
 }
 

@@ -382,6 +382,16 @@ export class Car {
     this.mesh.rotation.z = this.currentRoll;
     this.mesh.rotation.x = this.currentPitch;
 
+    // Sprint 10 fix: keep the car on the track surface in 3D (banked/elevated).
+    // Without this, the car stays at the start Y forever and "floats" through
+    // any elevation changes in the Catmull-Rom spline.
+    const wpIdx = getClosestWaypointIndex(this.mesh.position.x, this.mesh.position.z);
+    const wp = WAYPOINTS[wpIdx];
+    if (wp) {
+      // Snap Y with a small lerp so it doesn't pop on the first frame
+      this.mesh.position.y = THREE.MathUtils.lerp(this.mesh.position.y, wp.y, 0.3);
+    }
+
     const wheelRot = this.velocity * s * 2;
     for (const wheel of this.wheels) {
       wheel.rotation.x += wheelRot;
