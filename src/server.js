@@ -56,7 +56,15 @@ const server = http.createServer((req, res) => {
 
   fs.readFile(filePath, (err, content) => {
     if (err) { res.writeHead(404); res.end('Not found'); return; }
-    res.writeHead(200, { 'Content-Type': contentTypes[ext] || 'text/plain' });
+    const headers = { 'Content-Type': contentTypes[ext] || 'text/plain' };
+    // Cache-bust for assets that change every deploy: HTML, CSS, JS.
+    // Images and fonts use immutable caching for performance.
+    if (ext === '.html' || ext === '.css' || ext === '.js') {
+      headers['Cache-Control'] = 'no-cache, must-revalidate';
+    } else if (ext === '.woff2' || ext === '.png' || ext === '.svg' || ext === '.ico') {
+      headers['Cache-Control'] = 'public, max-age=31536000, immutable';
+    }
+    res.writeHead(200, headers);
     res.end(content);
   });
 });
