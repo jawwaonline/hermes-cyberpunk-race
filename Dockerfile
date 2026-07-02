@@ -1,5 +1,5 @@
 # Built: 2026-06-30
-ARG BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+ARG BUILD_DATE=unknown
 ARG GIT_COMMIT_SHA=unknown
 FROM node:22-alpine
 LABEL org.opencontainers.image.created=$BUILD_DATE
