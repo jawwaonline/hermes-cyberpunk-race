@@ -8,6 +8,22 @@ export function hideModeScreen() {
   document.getElementById('mode-screen').style.display = 'none';
 }
 
+export function showTrackScreen() {
+  document.getElementById('track-screen').style.display = 'flex';
+}
+
+export function hideTrackScreen() {
+  document.getElementById('track-screen').style.display = 'none';
+}
+
+export function showNameScreen() {
+  document.getElementById('name-screen').style.display = 'flex';
+}
+
+export function hideNameScreen() {
+  document.getElementById('name-screen').style.display = 'none';
+}
+
 export function showHUD() {
   document.getElementById('hud').style.display = 'block';
 }
@@ -74,13 +90,13 @@ export function updateHUD(lap, speed, position) {
   if (speedEl) speedEl.textContent = Math.round(speed);
 }
 
-export function showEndScreen(isWinner) {
+export function showEndScreen(isWinner, playerName) {
   const endScreen = document.getElementById('end-screen');
   const endTitle = document.getElementById('end-title');
 
   if (endScreen && endTitle) {
     endScreen.className = isWinner ? 'win' : 'lose';
-    endTitle.textContent = isWinner ? 'WINNER' : 'GAME OVER';
+    endTitle.textContent = isWinner ? `WINNER: ${playerName}` : 'GAME OVER';
     endScreen.style.display = 'flex';
   }
 }

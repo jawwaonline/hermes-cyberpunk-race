@@ -455,7 +455,7 @@ export class Game {
 
     this.playerCar = new Car(this.scene, true, 0x00ffff);
     this.playerCar.totalLaps = 3;
-    this.playerCar.playerName = playerName;
+    this.playerCar.setPlayerName(playerName);
 
     if (mode === 'ai') {
       this.aiCar = new Car(this.scene, false, 0xff00ff);
@@ -645,7 +645,7 @@ export class Game {
 
     if (playerWon) {
       endScreen.className = 'win';
-      endTitle.textContent = 'WINNER';
+      endTitle.textContent = `WINNER: ${this.playerName}`;
     } else {
       endScreen.className = 'lose';
       endTitle.textContent = 'GAME OVER';

@@ -2,10 +2,11 @@ import { Game } from './game.js';
 import {
   showModeScreen, hideModeScreen, showHUD, showWaiting, hideWaiting,
   showConnectionError, showWaitingTimer, updateWaitingTimer, hideWaitingTimer,
-  hideEndScreen
+  hideEndScreen, showTrackScreen, hideTrackScreen, showNameScreen, hideNameScreen
 } from './ui.js';
 import { VERSION } from './version.js';
 import { sounds } from './sounds.js';
+import { setCurrentTrack } from './shared-track.js';
 
 console.log(`%c[CyberpunkRace] v${VERSION}`, 'color:#0ff;font-weight:bold');
 const badge = document.getElementById('version-badge');
@@ -30,11 +31,35 @@ class CyberpunkRaceClient {
     this.game = new Game(container);
 
     document.getElementById('btn-ai').addEventListener('click', () => {
-      this.startAIMode();
+      this.selectedMode = 'ai';
+      hideModeScreen();
+      showTrackScreen();
     });
 
     document.getElementById('btn-hvh').addEventListener('click', () => {
-      this.startHumanVsHuman();
+      this.selectedMode = 'hvh';
+      hideModeScreen();
+      showTrackScreen();
+    });
+
+    document.querySelectorAll('.track-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const trackName = btn.dataset.track;
+        setCurrentTrack(trackName);
+        hideTrackScreen();
+        showNameScreen();
+      });
+    });
+
+    document.getElementById('btn-start-race').addEventListener('click', () => {
+      const nameInput = document.getElementById('player-name-input');
+      this.playerName = nameInput.value.trim() || 'Player 1';
+      hideNameScreen();
+      if (this.selectedMode === 'ai') {
+        this.startAIMode();
+      } else {
+        this.startHumanVsHuman();
+      }
     });
 
     document.getElementById('btn-restart').addEventListener('click', () => {

@@ -41,6 +41,73 @@
       background: var(--cyan); color: var(--deep);
       box-shadow: 0 0 30px var(--cyan);
     }
+
+    #track-screen {
+      position: fixed; inset: 0;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: var(--deep);
+      z-index: 100;
+    }
+    #track-screen h1 {
+      font-family: 'Audiowide', sans-serif;
+      font-size: 2.5rem; color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan), 0 0 40px var(--cyan);
+      margin-bottom: 2rem; letter-spacing: 0.2em;
+    }
+    #track-buttons {
+      display: flex; flex-direction: column; gap: 1rem;
+    }
+    .track-btn {
+      display: flex; flex-direction: column;
+      padding: 1rem 3rem; min-width: 320px;
+    }
+    .track-btn:hover {
+      background: var(--cyan); color: var(--deep);
+      box-shadow: 0 0 30px var(--cyan);
+    }
+    .track-name {
+      font-family: 'Audiowide', sans-serif;
+      font-size: 1.4rem; letter-spacing: 0.15em;
+    }
+    .track-desc {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 0.85rem; opacity: 0.7;
+      margin-top: 0.3rem; letter-spacing: 0.05em;
+    }
+
+    #name-screen {
+      position: fixed; inset: 0;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: var(--deep);
+      z-index: 100;
+    }
+    #name-screen h1 {
+      font-family: 'Audiowide', sans-serif;
+      font-size: 2.5rem; color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan), 0 0 40px var(--cyan);
+      margin-bottom: 2rem; letter-spacing: 0.2em;
+    }
+    .name-input {
+      padding: 1rem 1.5rem;
+      background: rgba(10, 14, 39, 0.9);
+      border: 2px solid var(--cyan);
+      color: var(--cyan);
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1.3rem;
+      text-align: center;
+      letter-spacing: 0.1em;
+      margin-bottom: 2rem;
+      outline: none;
+      width: 280px;
+    }
+    .name-input:focus {
+      box-shadow: 0 0 20px var(--cyan);
+    }
+    .name-input::placeholder {
+      color: rgba(0, 245, 255, 0.4);
+    }
     #waiting {
       display: none; margin-top: 2rem;
       font-size: 1.5rem; color: var(--cyan); font-family: 'VT323', monospace;
@@ -267,6 +334,30 @@
     <button class="mode-btn" id="btn-ai">Human vs AI</button>
     <button class="mode-btn" id="btn-hvh">Human vs Human</button>
     <div id="waiting">Waiting for opponent...</div>
+  </div>
+
+  <div id="track-screen" style="display:none">
+    <h1>SELECT TRACK</h1>
+    <div id="track-buttons">
+      <button class="mode-btn track-btn" data-track="oval">
+        <span class="track-name">OVAL</span>
+        <span class="track-desc">Classic oval with gentle curves</span>
+      </button>
+      <button class="mode-btn track-btn" data-track="figure8">
+        <span class="track-name">FIGURE-8</span>
+        <span class="track-desc">Crossing path with elevation changes</span>
+      </button>
+      <button class="mode-btn track-btn" data-track="scurves">
+        <span class="track-name">S-CURVES</span>
+        <span class="track-desc">Winding course with sharp turns</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="name-screen" style="display:none">
+    <h1>ENTER NAME</h1>
+    <input type="text" id="player-name-input" class="name-input" value="Player 1" maxlength="16" />
+    <button class="mode-btn" id="btn-start-race">START RACE</button>
   </div>
 
   <div id="hud">

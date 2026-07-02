@@ -302,7 +302,69 @@ export class Car {
     this.startAngle = startAngle;
     this.rotation = startAngle;
 
+    this.playerName = 'Player 1';
+    this.nameLabel = this.createNameLabel();
+    this.mesh.add(this.nameLabel);
+
     scene.add(this.mesh);
+  }
+
+  createNameLabel() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = 'rgba(10, 14, 39, 0.8)';
+    ctx.fillRect(0, 0, 256, 64);
+
+    ctx.strokeStyle = '#00F5FF';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(2, 2, 252, 60);
+
+    ctx.font = 'bold 32px Rajdhani, sans-serif';
+    ctx.fillStyle = '#00F5FF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(this.playerName, 128, 32);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+
+    const spriteMat = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false
+    });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.scale.set(8, 2, 1);
+    sprite.position.y = 3;
+    return sprite;
+  }
+
+  setPlayerName(name) {
+    this.playerName = name;
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = 'rgba(10, 14, 39, 0.8)';
+    ctx.fillRect(0, 0, 256, 64);
+
+    ctx.strokeStyle = '#00F5FF';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(2, 2, 252, 60);
+
+    ctx.font = 'bold 32px Rajdhani, sans-serif';
+    ctx.fillStyle = '#00F5FF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name, 128, 32);
+
+    this.nameLabel.material.map.dispose();
+    this.nameLabel.material.map = new THREE.CanvasTexture(canvas);
+    this.nameLabel.material.map.needsUpdate = true;
   }
 
   checkBoostPads() {
