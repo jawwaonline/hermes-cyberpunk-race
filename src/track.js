@@ -448,6 +448,27 @@ export function isOnTrack(x, z) {
   return dist < TRACK_WIDTH / 2 + 2;
 }
 
+/**
+ * Get the interpolated Y height at an arbitrary (x,z) position on the track.
+ * Projects the position onto the nearest segment between two consecutive
+ * waypoints and interpolates Y, giving smooth transitions even at high speed.
+ * Returns wp.y directly when segment length is too small to interpolate.
+ */
+export function getTrackYAtPosition(x, z) {
+  const idx = getClosestWaypointIndex(x, z);
+  const wp = WAYPOINTS[idx];
+  const wpNext = WAYPOINTS[(idx + 1) % WAYPOINTS.length];
+  if (!wp || !wpNext) return wp ? wp.y : 0;
+  const tdx = wpNext.x - wp.x;
+  const tdz = wpNext.z - wp.z;
+  const segLenSq = tdx * tdx + tdz * tdz;
+  if (segLenSq < 0.01) return wp.y;
+  const dx = x - wp.x;
+  const dz = z - wp.z;
+  const t = Math.max(0, Math.min(1, (dx * tdx + dz * tdz) / segLenSq));
+  return wp.y + (wpNext.y - wp.y) * t;
+}
+
 export function updateTrackShader(trackGroup, time, playerPos) {
   if (trackGroup.userData.trackMat) {
     trackGroup.userData.trackMat.uniforms.uTime.value = time;

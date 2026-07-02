@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TRACK_WIDTH, WAYPOINTS, BOOST_PADS } from './shared-track.js';
-import { getClosestWaypointIndex, isOnTrack } from './track.js';
+import { getClosestWaypointIndex, getTrackYAtPosition, isOnTrack } from './track.js';
 
 const CHECKPOINTS = [];
 for (let i = 0; i < 4; i++) {
@@ -383,14 +383,9 @@ export class Car {
     this.mesh.rotation.x = this.currentPitch;
 
     // Sprint 10 fix: keep the car on the track surface in 3D (banked/elevated).
-    // Without this, the car stays at the start Y forever and "floats" through
-    // any elevation changes in the Catmull-Rom spline.
-    const wpIdx = getClosestWaypointIndex(this.mesh.position.x, this.mesh.position.z);
-    const wp = WAYPOINTS[wpIdx];
-    if (wp) {
-      // Snap Y with a small lerp so it doesn't pop on the first frame
-      this.mesh.position.y = THREE.MathUtils.lerp(this.mesh.position.y, wp.y, 0.3);
-    }
+    // Use interpolated Y along the nearest track segment for smooth transitions
+    // at high speed — the old lerp(0.3) was too slow for rapid elevation changes.
+    this.mesh.position.y = getTrackYAtPosition(this.mesh.position.x, this.mesh.position.z);
 
     const wheelRot = this.velocity * s * 2;
     for (const wheel of this.wheels) {
