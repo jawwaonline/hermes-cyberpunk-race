@@ -1,15 +1,7 @@
 import * as THREE from 'three';
-import { TRACK_WIDTH, WAYPOINTS, BOOST_PADS } from './shared-track.js';
+import { TRACK_WIDTH, WAYPOINTS, getWaypoints, BOOST_PADS } from './shared-track.js';
 
-const CHECKPOINTS = [];
-
-for (let i = 0; i < 4; i++) {
-  const idx = Math.floor((i / 4) * WAYPOINTS.length);
-  const wp = WAYPOINTS[idx];
-  CHECKPOINTS.push({ id: i, x: wp.x, z: wp.z, y: wp.y, r: 15 });
-}
-
-export { TRACK_WIDTH, WAYPOINTS, BOOST_PADS, CHECKPOINTS };
+export { TRACK_WIDTH, BOOST_PADS };
 
 export const BARRIER_HEIGHT = 2;
 
@@ -489,6 +481,14 @@ export function updateFinishLine(finishLine, time) {
 }
 
 export function createCheckpointRings(scene) {
+  const waypoints = getWaypoints();
+  const CHECKPOINTS = [];
+  for (let i = 0; i < 4; i++) {
+    const idx = Math.floor((i / 4) * waypoints.length);
+    const wp = waypoints[idx];
+    CHECKPOINTS.push({ id: i, x: wp.x, z: wp.z, y: wp.y, r: 15 });
+  }
+
   const group = new THREE.Group();
   group.name = 'checkpoints';
   group.userData.rings = [];

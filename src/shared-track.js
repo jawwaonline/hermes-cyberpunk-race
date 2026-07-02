@@ -2,28 +2,74 @@
 export const TRACK_WIDTH = 20;
 export const TRACK_LENGTH = 400;
 
-const CONTROL_POINTS = [
-  { x: 0,   z: -200, y: 0 },   // Start/finish straight
-  { x: 50,  z: -190, y: 0 },   // gentle right curve start
-  { x: 90,  z: -150, y: 3 },   // sweeping right - mild banking
-  { x: 120, z: -90,  y: 8 },   // climbing into hairpin
-  { x: 130, z: -20,  y: 15 },  // sharp right turn entry
-  { x: 110, z: 50,   y: 22 },  // apex of elevated hairpin
-  { x: 60,  z: 100,  y: 18 },  // descending from hairpin
-  { x: 10,  z: 140,  y: 5 },   // chicane entry
-  { x: -30, z: 160,  y: 0 },   // sharp left chicane
-  { x: -70, z: 140,  y: 3 },   // chicane middle
-  { x: -100, z: 90,  y: 0 },   // chicane exit
-  { x: -110, z: 30,  y: 8 },   // sweeping curve entry (banked)
-  { x: -100, z: -40, y: 15 },  // high-speed banked turn
-  { x: -60,  z: -90, y: 10 },  // descending sweeper
-  { x: -20,  z: -130, y: 3 },  // back straight approach
-  { x: 10,   z: -170, y: 0 },  // final curve to start/finish
-  { x: 0,    z: -200, y: 0 },  // close loop
-];
+const TRACK_DEFINITIONS = {
+  oval: {
+    name: 'Oval',
+    description: 'Classic oval with gentle curves',
+    controlPoints: [
+      { x: 0,    z: -150, y: 0 },
+      { x: 80,   z: -150, y: 0 },
+      { x: 120,  z: -100, y: 5 },
+      { x: 120,  z: 0,    y: 5 },
+      { x: 120,  z: 100,  y: 5 },
+      { x: 80,   z: 150,  y: 0 },
+      { x: 0,    z: 150,  y: 0 },
+      { x: -80,  z: 150,  y: 0 },
+      { x: -120, z: 100,  y: 5 },
+      { x: -120, z: 0,    y: 5 },
+      { x: -120, z: -100, y: 5 },
+      { x: -80,  z: -150, y: 0 },
+      { x: 0,    z: -150, y: 0 },
+    ]
+  },
+  figure8: {
+    name: 'Figure-8',
+    description: 'Crossing path with elevation changes',
+    controlPoints: [
+      { x: 0,    z: -120, y: 0 },
+      { x: 60,   z: -120, y: 0 },
+      { x: 100,  z: -80,  y: 8 },
+      { x: 100,  z: 0,    y: 12 },
+      { x: 60,   z: 40,   y: 8 },
+      { x: 0,    z: 40,   y: 0 },
+      { x: -60,  z: 40,   y: 8 },
+      { x: -100, z: 0,    y: 12 },
+      { x: -100, z: -80,  y: 8 },
+      { x: -60,  z: -120, y: 0 },
+      { x: 0,    z: -120, y: 0 },
+    ]
+  },
+  scurves: {
+    name: 'S-Curves',
+    description: 'Winding course with sharp turns',
+    controlPoints: [
+      { x: 0,    z: -180, y: 0 },
+      { x: 60,   z: -180, y: 3 },
+      { x: 100,  z: -140, y: 8 },
+      { x: 100,  z: -80,  y: 5 },
+      { x: 60,   z: -40,  y: 0 },
+      { x: 0,    z: 0,    y: 5 },
+      { x: -60,  z: 40,   y: 8 },
+      { x: -100, z: 80,   y: 5 },
+      { x: -100, z: 140,  y: 8 },
+      { x: -60,  z: 180,  y: 3 },
+      { x: 0,    z: 180,  y: 0 },
+      { x: 60,   z: 180,  y: 3 },
+      { x: 80,   z: 140,  y: 0 },
+      { x: 60,   z: 100,  y: 0 },
+      { x: 0,    z: 80,   y: 3 },
+      { x: -60,  z: 60,   y: 0 },
+      { x: -80,  z: 20,   y: 0 },
+      { x: -60,  z: -20,  y: 0 },
+      { x: 0,    z: -60,  y: 0 },
+      { x: 60,   z: -100, y: 0 },
+      { x: 40,   z: -140, y: 0 },
+      { x: 0,    z: -180, y: 0 },
+    ]
+  }
+};
 
-const SAMPLES_PER_SEGMENT = 8;
-const NUM_SEGMENTS = CONTROL_POINTS.length - 1;
+let currentTrackName = 'oval';
 
 function catmullRom(p0, p1, p2, p3, t) {
   const t2 = t * t;
@@ -35,36 +81,56 @@ function catmullRom(p0, p1, p2, p3, t) {
   };
 }
 
-function generateWaypoints() {
-  const WAYPOINTS = [];
-  const n = CONTROL_POINTS.length;
+function generateWaypointsForTrack(controlPoints) {
+  const result = [];
+  const n = controlPoints.length;
+  const SAMPLES_PER_SEGMENT = 8;
 
   for (let i = 0; i < n; i++) {
-    const p0 = CONTROL_POINTS[(i - 1 + n) % n];
-    const p1 = CONTROL_POINTS[i];
-    const p2 = CONTROL_POINTS[(i + 1) % n];
-    const p3 = CONTROL_POINTS[(i + 2) % n];
+    const p0 = controlPoints[(i - 1 + n) % n];
+    const p1 = controlPoints[i];
+    const p2 = controlPoints[(i + 1) % n];
+    const p3 = controlPoints[(i + 2) % n];
 
-    const samples = (i < n - 1) ? SAMPLES_PER_SEGMENT : SAMPLES_PER_SEGMENT;
-    for (let j = 0; j < samples; j++) {
+    for (let j = 0; j < SAMPLES_PER_SEGMENT; j++) {
       const t = j / SAMPLES_PER_SEGMENT;
       const pt = catmullRom(p0, p1, p2, p3, t);
-      WAYPOINTS.push(pt);
+      result.push(pt);
     }
   }
 
-  // Sprint 10 fix: snap the very last waypoint to the first one. The Catmull-Rom
-  // spline's last segment can end a few metres off the start because of how
-  // the parameter `t` runs (it goes 0..1-1/N at the last sample). Snapping
-  // ensures a truly closed loop for the racing track — without this, the
-  // player's "lap" never completes and `computeTrackTangent` would produce
-  // a near-zero-length vector between the last and first waypoints, which
-  // Three.js reports as "Computed radius is NaN".
-  WAYPOINTS[WAYPOINTS.length - 1] = { ...WAYPOINTS[0] };
-  return WAYPOINTS;
+  result[result.length - 1] = { ...result[0] };
+  return result;
 }
 
-export const WAYPOINTS = generateWaypoints();
+let currentWaypoints = generateWaypointsForTrack(TRACK_DEFINITIONS.oval.controlPoints);
+
+export const WAYPOINTS = currentWaypoints;
+
+export function setCurrentTrack(trackName) {
+  if (TRACK_DEFINITIONS[trackName]) {
+    currentTrackName = trackName;
+    currentWaypoints = generateWaypointsForTrack(TRACK_DEFINITIONS[trackName].controlPoints);
+    WAYPOINTS.length = 0;
+    WAYPOINTS.push(...currentWaypoints);
+  }
+}
+
+export function getCurrentTrackName() {
+  return currentTrackName;
+}
+
+export function getTrackNames() {
+  return Object.keys(TRACK_DEFINITIONS);
+}
+
+export function getTrackDefinition(trackName) {
+  return TRACK_DEFINITIONS[trackName || currentTrackName];
+}
+
+export function getWaypoints() {
+  return currentWaypoints;
+}
 
 export const BOOST_PADS = [
   { x: 55,  z: -130, y: 0, angle: Math.PI / 4,  strength: 1.5 },
